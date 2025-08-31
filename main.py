@@ -1,4 +1,4 @@
-# filename: monitor.py
+# filename: main.py (已更新)
 import re
 import sys
 import requests
@@ -19,7 +19,8 @@ else:
 
 # 导入我们自己的模块
 import database as db
-import notifier  # <-- 新增：导入通知模块
+import notifier
+import bvget  # <-- 新增：导入 bvget 模块
 
 
 # --- 核心功能函数 ---
@@ -46,6 +47,40 @@ def get_header():
             if not cookie:
                 print("错误：登录后 'bili_cookie.txt' 仍然为空，请手动检查登录过程是否成功。")
                 sys.exit(1)
+
+            # vvv 新增：登录成功后，自动获取该账号下的所有视频 vvv
+            print("\n" + "=" * 15)
+            print("检测到新登录，尝试自动获取您投稿的所有视频...")
+
+            # 为了调用 get_information, 我们需要一个临时的 header
+            temp_header_for_bv_fetch = {
+                "Cookie": cookie,
+                "User-Agent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+                "Referer": "https://www.bilibili.com"
+            }
+
+            all_bvids = bvget.get_all_bvids_from_api()
+            if all_bvids:
+                print(f"成功获取到 {len(all_bvids)} 个视频，正在添加到监控数据库...")
+                added_count = 0
+                for bv_id in all_bvids:
+                    # 使用现有函数获取视频详细信息
+                    oid, title = get_information(bv_id, temp_header_for_bv_fetch)
+                    if oid and title:
+                        # 使用现有函数添加到数据库，它会自动处理重复项
+                        if db.add_video_to_db(oid, bv_id, title):
+                            added_count += 1
+                    time.sleep(0.5)  # 短暂延时，避免API请求过快
+
+                if added_count > 0:
+                    print(f"✅ 成功添加 {added_count} 个新视频到数据库。")
+                else:
+                    print("ℹ️ 所有视频均已存在于数据库中，未添加新视频。")
+            else:
+                print("⚠️ 未能获取到视频列表，请稍后在菜单中手动添加。")
+            print("=" * 15 + "\n")
+            # ^^^ 新增 ^^^
+
         except FileNotFoundError:
             print("\n错误：无法在当前目录下找到 'login_bilibili.py'。")
             print("请确保登录脚本与主脚本在同一个文件夹中，或手动创建 'bili_cookie.txt' 文件。")
@@ -286,7 +321,6 @@ def wait_with_manual_trigger(interval_seconds):
         time.sleep(0.1)  # 短暂休眠，避免 CPU 占用过高
 
 
-# vvv 修改 vvv
 def start_monitoring(targets_to_monitor, header, interval, webhook_enabled):
     """监控选定视频的新评论，包含获取所有子评论的功能。"""
     video_targets = {}
@@ -374,9 +408,6 @@ def start_monitoring(targets_to_monitor, header, interval, webhook_enabled):
             time.sleep(60)
 
 
-# ^^^ 修改 ^^^
-
-
 if __name__ == "__main__":
     try:
         import requests
@@ -427,3 +458,4 @@ if __name__ == "__main__":
         header = get_header()
         # 修改：传入 webhook_enabled 参数
         start_monitoring(targets, header, interval_seconds, webhook_enabled)
+
