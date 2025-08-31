@@ -53,10 +53,13 @@ def send_webhook_notification(video_title, new_comments):
     full_message = "\n".join(message_lines)
 
     # 构建通用的 JSON payload
-    # 大多数平台接受一个包含 "content" 键的 JSON
+    # 2025年8月22日12:04:58 实测 钉钉 企业微信 OK
     payload = {
-        "content": full_message
-    }
+        "msgtype": "text",
+        "text": {
+            "content": full_message
+            } 
+        }
 
     # 发送POST请求
     try:

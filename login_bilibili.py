@@ -31,11 +31,23 @@ def generate_and_show_qrcode():
             print("二维码获取成功，请打开脚本同目录下的 'qrcode.png' 文件进行扫描。")
 
             # --- 这是修改的核心部分 ---
-            # 直接使用 qrcode.make() 更简洁地创建二维码图片
+            # 使用 qrcode.make() 创建二维码图片
             img = qrcode.make(login_url)
             # 将图片保存到文件
             img.save("qrcode.png")
-            img.show()
+            
+            # 使用系统默认图片查看器打开二维码
+            import os
+            if os.name == 'nt':  # Windows系统
+                os.startfile("qrcode.png")
+            else:  # macOS和Linux
+                try:
+                    os.system('open qrcode.png')  # macOS
+                except:
+                    try:
+                        os.system('xdg-open qrcode.png')  # Linux
+                    except:
+                        print("请手动打开 qrcode.png 文件查看二维码")
             # --- 修改结束 ---
 
             return qrcode_key
