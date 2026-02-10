@@ -21,6 +21,7 @@ else:
 import database as db
 import notifier
 import bvget  # <-- 新增：导入 bvget 模块
+import user_monitor  # <-- 新增：导入用户监控模块
 
 
 # --- 核心功能函数 ---
@@ -171,6 +172,133 @@ def fetch_all_sub_replies(oid, root_rpid, header):
 
 # --- 启动菜单与主逻辑 ---
 
+def display_user_management_menu(header):
+    """顯示用戶監控管理菜單。"""
+    while True:
+        print("\n" + "=" * 20 + " 用戶監控管理 " + "=" * 20)
+        users = db.get_monitored_users()
+        
+        if not users:
+            print("當前沒有監控任何用戶。")
+        else:
+            print("已監控的用戶列表:")
+            for i, (mid, uname, monitor_comments, monitor_dynamic) in enumerate(users):
+                comment_status = "✓" if monitor_comments else "✗"
+                dynamic_status = "✓" if monitor_dynamic else "✗"
+                print(f"  [{i + 1}] {uname} (UID: {mid})")
+                print(f"       監控評論: {comment_status} | 監控動態: {dynamic_status}")
+
+        print("\n操作選項:")
+        print("  - 輸入 'a' 添加用戶到監控列表。")
+        print("  - 輸入 'd' 按用戶名搜索並添加用戶。")
+        print("  - 輸入 'r' 移除監控用戶。")
+        print("  - 輸入 't' 切換用戶的監控設置。")
+        print("  - 輸入 'q' 返回主菜單。")
+        
+        choice = input("\n請輸入您的選擇: ").strip().lower()
+        
+        if choice == 'a':
+            mid_input = input("請輸入用戶UID (多個請用逗號或空格隔開): ").strip()
+            mids = [m.strip() for m in re.split(r'[\s,]+', mid_input) if m.strip()]
+            
+            for mid in mids:
+                uname, _ = user_monitor.get_user_info(mid, header)
+                if uname:
+                    monitor_comments = input(f"是否監控 [{uname}] 的評論? (y/n, 默認y): ").strip().lower() != 'n'
+                    monitor_dynamic = input(f"是否監控 [{uname}] 的動態視頻? (y/n, 默認y): ").strip().lower() != 'n'
+                    
+                    if db.add_monitored_user(mid, uname, 
+                                           1 if monitor_comments else 0, 
+                                           1 if monitor_dynamic else 0):
+                        print(f"✅ 成功添加 [{uname}] 到監控列表。")
+                    else:
+                        print(f"❌ 添加 [{uname}] 失敗。")
+                else:
+                    print(f"❌ 無法獲取用戶 {mid} 的信息，請檢查UID是否正確。")
+                time.sleep(0.5)
+                
+        elif choice == 'd':
+            keyword = input("請輸入用戶名關鍵詞進行搜索: ").strip()
+            if keyword:
+                print(f"正在搜索用戶 '{keyword}'...")
+                found_users = user_monitor.search_user_by_keyword(keyword, header)
+                if found_users:
+                    print(f"找到 {len(found_users)} 個用戶:")
+                    for i, (mid, uname) in enumerate(found_users[:10]):  # 最多顯示10個
+                        print(f"  [{i + 1}] {uname} (UID: {mid})")
+                    
+                    select = input("請輸入編號選擇用戶 (多個請用逗號隔開，或直接回車取消): ").strip()
+                    if select:
+                        try:
+                            indices = [int(i.strip()) - 1 for i in select.split(',')]
+                            for idx in indices:
+                                if 0 <= idx < len(found_users):
+                                    mid, uname = found_users[idx]
+                                    monitor_comments = input(f"是否監控 [{uname}] 的評論? (y/n, 默認y): ").strip().lower() != 'n'
+                                    monitor_dynamic = input(f"是否監控 [{uname}] 的動態視頻? (y/n, 默認y): ").strip().lower() != 'n'
+                                    
+                                    if db.add_monitored_user(mid, uname,
+                                                           1 if monitor_comments else 0,
+                                                           1 if monitor_dynamic else 0):
+                                        print(f"✅ 成功添加 [{uname}] 到監控列表。")
+                                    else:
+                                        print(f"❌ 添加 [{uname}] 失敗。")
+                        except ValueError:
+                            print("錯誤：請輸入正確的數字格式。")
+                else:
+                    print("未找到匹配的用戶。")
+                    
+        elif choice == 'r':
+            if not users:
+                print("沒有用戶可以移除。")
+                continue
+            remove_choice = input("請輸入要移除的用戶編號: ").strip()
+            try:
+                idx = int(remove_choice) - 1
+                if 0 <= idx < len(users):
+                    mid_to_remove, uname_to_remove, _, _ = users[idx]
+                    confirm = input(f"確定要移除監控用戶 [{uname_to_remove}] 嗎? (y/n): ").lower()
+                    if confirm == 'y':
+                        if db.remove_monitored_user(mid_to_remove):
+                            print(f"✅ 已成功移除 [{uname_to_remove}]。")
+                        else:
+                            print("❌ 移除失敗。")
+                else:
+                    print("錯誤：無效的編號。")
+            except ValueError:
+                print("錯誤：請輸入一個數字。")
+                
+        elif choice == 't':
+            if not users:
+                print("沒有用戶可以設置。")
+                continue
+            toggle_choice = input("請輸入要設置的用戶編號: ").strip()
+            try:
+                idx = int(toggle_choice) - 1
+                if 0 <= idx < len(users):
+                    mid, uname, curr_comments, curr_dynamic = users[idx]
+                    print(f"當前設置 - 監控評論: {'是' if curr_comments else '否'}, 監控動態: {'是' if curr_dynamic else '否'}")
+                    
+                    new_comments = input("是否監控該用戶的評論? (y/n): ").strip().lower()
+                    new_dynamic = input("是否監控該用戶的動態視頻? (y/n): ").strip().lower()
+                    
+                    db.update_user_monitor_settings(
+                        mid,
+                        monitor_comments=1 if new_comments == 'y' else 0 if new_comments == 'n' else None,
+                        monitor_dynamic=1 if new_dynamic == 'y' else 0 if new_dynamic == 'n' else None
+                    )
+                    print(f"✅ 已更新 [{uname}] 的監控設置。")
+                else:
+                    print("錯誤：無效的編號。")
+            except ValueError:
+                print("錯誤：請輸入一個數字。")
+                
+        elif choice == 'q':
+            break
+        else:
+            print("無效的輸入，請重新選擇。")
+
+
 def display_main_menu():
     """显示主菜单并处理用户交互，返回用户选择要监控的视频列表。"""
     header = get_header()
@@ -190,6 +318,7 @@ def display_main_menu():
         print("  - 输入数字 (如 1,3) 选择列表中的视频加入本次监控。")
         print("  - 输入 'a' 添加新的视频 BV 号到数据库。")
         print("  - 输入 'r' 移除数据库中的视频。")
+        print("  - 输入 'u' 管理用戶監控設置。")
         print("  - 输入 's' 开始监控已选择的视频。")
         print("  - 输入 'q' 退出程序。")
 
@@ -242,6 +371,9 @@ def display_main_menu():
                     print("错误：无效的编号。")
             except ValueError:
                 print("错误：请输入一个数字。")
+        
+        elif choice == 'u':
+            display_user_management_menu(header)
 
         elif choice == 's':
             if not selected_videos:
@@ -257,9 +389,28 @@ def display_main_menu():
             print("无效的输入，请重新选择。")
 
 
-def process_and_notify_comment(reply, oid, seen_ids, parent_user_name=None):
-    """处理单条评论，检查是否为新评论，如果是，则存入数据库并返回格式化信息。"""
+def process_and_notify_comment(reply, oid, seen_ids, parent_user_name=None, filter_user_mids=None):
+    """
+    处理单条评论，检查是否为新评论，如果是，则存入数据库并返回格式化信息。
+    
+    Args:
+        reply: 评论数据
+        oid: 视频ID
+        seen_ids: 已见过的评论ID集合
+        parent_user_name: 父评论用户名（用于子评论）
+        filter_user_mids: 如果指定，只返回这些用户的评论
+    """
     rpid = reply['rpid_str']
+    member_mid = str(reply['member']['mid'])
+    
+    # 如果指定了用户过滤，且当前评论不是指定用户的，则跳过
+    if filter_user_mids and member_mid not in filter_user_mids:
+        # 仍然添加到已见列表，避免重复检查
+        if rpid not in seen_ids:
+            seen_ids.add(rpid)
+            db.add_comment_to_db(rpid, oid)
+        return None
+    
     if rpid not in seen_ids:
         seen_ids.add(rpid)
         db.add_comment_to_db(rpid, oid)
@@ -321,61 +472,203 @@ def wait_with_manual_trigger(interval_seconds):
         time.sleep(0.1)  # 短暂休眠，避免 CPU 占用过高
 
 
-def start_monitoring(targets_to_monitor, header, interval, webhook_enabled):
-    """监控选定视频的新评论，包含获取所有子评论的功能。"""
+def check_and_add_dynamic_videos(header, verbose=True):
+    """
+    檢查所有設置了動態監控的用戶，獲取他們的新視頻並添加到監控列表。
+    
+    Args:
+        header: 請求頭
+        verbose: 是否顯示詳細日誌
+        
+    Returns:
+        新添加的視頻數量
+    """
+    dynamic_users = db.get_dynamic_monitored_user_mids()
+    if not dynamic_users:
+        if verbose:
+            print("\n  -> [動態監控] 沒有設置動態監控的用戶")
+        return 0
+    
+    if verbose:
+        print(f"\n  -> [動態監控] 正在檢查 {len(dynamic_users)} 個用戶的最新動態...")
+        print(f"     用戶列表: {', '.join(dynamic_users.values())}")
+    
+    new_videos_count = 0
+    total_checked = 0
+    existing_bvids = db.get_dynamic_video_bvids()
+    
+    if verbose:
+        print(f"     已有 {len(existing_bvids)} 個視頻在監控列表中")
+    
+    for mid, uname in dynamic_users.items():
+        try:
+            videos = user_monitor.get_user_dynamic_videos(mid, header, limit=5)
+            total_checked += len(videos)
+            if verbose and videos:
+                print(f"     [{uname}] 獲取到 {len(videos)} 個視頻")
+            
+            for bvid, title in videos:
+                if bvid not in existing_bvids:
+                    # 獲取視頻詳細信息
+                    oid, video_title = get_information(bvid, header)
+                    if oid and video_title:
+                        # 添加到視頻監控列表
+                        if db.add_video_to_db(oid, bvid, video_title):
+                            # 記錄到動態視頻表
+                            db.add_dynamic_video(bvid, mid, video_title)
+                            if verbose:
+                                print(f"     ✚ 從 [{uname}] 的動態添加新視頻: 【{video_title}】")
+                            new_videos_count += 1
+                        time.sleep(0.5)
+                    elif verbose:
+                        print(f"     ✗ 無法獲取視頻 {bvid} 的詳細信息")
+                elif verbose:
+                    print(f"     • 視頻 [{title}] 已在監控列表中，跳過")
+        except Exception as e:
+            if verbose:
+                print(f"     ✗ 檢查用戶 [{uname}] 動態時出錯: {e}")
+    
+    if verbose:
+        if new_videos_count > 0:
+            print(f"  -> [動態監控] 共檢查 {total_checked} 個視頻，新增 {new_videos_count} 個到監控列表")
+        else:
+            print(f"  -> [動態監控] 共檢查 {total_checked} 個視頻，暫無新視頻")
+    
+    return new_videos_count
+
+
+def start_monitoring(targets_to_monitor, header, interval, webhook_enabled, enable_user_filter=False, enable_dynamic_monitor=False):
+    """
+    监控选定视频的新评论，包含获取所有子评论的功能。
+    
+    Args:
+        targets_to_monitor: 要监控的视频列表
+        header: 请求头
+        interval: 检查间隔（秒）
+        webhook_enabled: 是否启用Webhook通知
+        enable_user_filter: 是否只监控指定用户的评论
+        enable_dynamic_monitor: 是否监控用户动态视频
+    """
     video_targets = {}
+    
+    # 如果用戶過濾啟用，獲取要監控的用戶ID集合
+    filter_user_mids = None
+    if enable_user_filter:
+        filter_user_mids = db.get_comment_monitored_user_mids()
+        if filter_user_mids:
+            # 獲取用戶名列表用於顯示
+            all_users = db.get_monitored_users()
+            filtered_names = [u[1] for u in all_users if u[0] in filter_user_mids]
+            print(f"\n🎯 用戶過濾已啟用，只監控以下 {len(filter_user_mids)} 個用戶的評論:")
+            for name in filtered_names:
+                print(f"     - {name}")
+        else:
+            print("\n⚠️ 用戶過濾已啟用，但沒有設置監控用戶，將監控所有評論")
 
     print("\n" + "=" * 20 + " 初始化监控数据 " + "=" * 20)
+    total_seen = 0
     for oid, data in targets_to_monitor:
         print(f"正在为【{data['title']}】加载历史评论记录...")
         video_targets[oid] = {
             "title": data['title'],
             "seen_ids": db.load_seen_comments_for_video(oid)
         }
-        print(f"-> 加载完成，已记录 {len(video_targets[oid]['seen_ids'])} 则历史评论。")
+        seen_count = len(video_targets[oid]['seen_ids'])
+        total_seen += seen_count
+        print(f"-> 加载完成，已记录 {seen_count} 则历史评论。")
 
-    print(f"\n✅ 准备就绪！开始监控 {len(video_targets)} 个视频。")
+    print(f"\n✅ 准备就绪！开始监控 {len(video_targets)} 个视频，共 {total_seen} 条历史评论。")
     print("=" * 55)
+    
+    # 統計信息
+    check_count = 0
+    total_new_comments = 0
 
     while True:
         try:
+            check_count += 1
             now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            print(f"\n[{now}] 开始新一轮检查...")
+            print(f"\n[{now}] 第 {check_count} 轮检查开始...")
+            
+            # 如果啟用了動態監控，先檢查用戶新視頻
+            if enable_dynamic_monitor:
+                new_videos = check_and_add_dynamic_videos(header)
+                if new_videos > 0:
+                    # 重新加載視頻列表
+                    print("  -> [動態監控] 重新加載視頻列表...")
+                    new_added = 0
+                    for oid, bv_id, title in db.get_monitored_videos():
+                        if oid not in video_targets:
+                            video_targets[oid] = {
+                                "title": title,
+                                "seen_ids": db.load_seen_comments_for_video(oid)
+                            }
+                            print(f"     ✚ 已將新視頻【{title}】加入監控")
+                            new_added += 1
+                    print(f"  -> [動態監控] 本次共新增 {new_added} 個視頻到監控列表")
 
+            round_new_comments = 0
             for oid, data in video_targets.items():
                 title = data['title']
                 seen_ids = data['seen_ids']
-                print(f"  -> 正在检查【{title}】...")
+                print(f"  -> [評論監控] 正在检查【{title}】...")
 
                 latest_comments = fetch_latest_comments(oid, header)
+                if not latest_comments:
+                    print(f"     ⚠️ 未能獲取到評論數據，可能API請求失敗")
+                    continue
+                    
+                print(f"     獲取到 {len(latest_comments)} 條頂層評論")
                 new_comments_found = []
+                checked_replies = 0
 
                 for comment in latest_comments:
-                    new_main_comment = process_and_notify_comment(comment, oid, seen_ids)
-                    if new_main_comment:
-                        new_comments_found.append(new_main_comment)
+                    commenter_name = comment['member']['uname']
+                    commenter_mid = str(comment['member']['mid'])
+                    
+                    # 檢查是否被過濾
+                    if filter_user_mids and commenter_mid not in filter_user_mids:
+                        # 靜默跳過，不打擾日誌
+                        pass
+                    else:
+                        new_main_comment = process_and_notify_comment(comment, oid, seen_ids, 
+                                                                       filter_user_mids=filter_user_mids)
+                        if new_main_comment:
+                            new_comments_found.append(new_main_comment)
+                            round_new_comments += 1
 
                     if comment.get('replies'):
-                        for sub_reply in comment['replies']:
+                        replies = comment['replies']
+                        checked_replies += len(replies)
+                        for sub_reply in sub_reply in comment['replies']:
                             new_sub_comment = process_and_notify_comment(sub_reply, oid, seen_ids,
-                                                                         parent_user_name=comment['member']['uname'])
+                                                                         parent_user_name=comment['member']['uname'],
+                                                                         filter_user_mids=filter_user_mids)
                             if new_sub_comment:
                                 new_comments_found.append(new_sub_comment)
+                                round_new_comments += 1
 
                     rcount = comment.get('rcount', 0)
                     initial_reply_count = len(comment.get('replies') or [])
 
                     if rcount > initial_reply_count:
-                        print(f"  └── 发现【{comment['member']['uname']}】的评论有 {rcount} 条回复，正在抓取所有回复...")
+                        print(f"     └─ 發現【{comment['member']['uname']}】的評論有 {rcount} 條回復（已顯示 {initial_reply_count} 條），正在抓取剩餘 {rcount - initial_reply_count} 條...")
                         all_sub_replies = fetch_all_sub_replies(oid, comment['rpid_str'], header)
+                        print(f"        成功抓取 {len(all_sub_replies)} 條回復")
 
                         for sub_reply in all_sub_replies:
                             new_hidden_comment = process_and_notify_comment(sub_reply, oid, seen_ids,
-                                                                            parent_user_name=comment['member']['uname'])
+                                                                            parent_user_name=comment['member']['uname'],
+                                                                            filter_user_mids=filter_user_mids)
                             if new_hidden_comment:
                                 new_comments_found.append(new_hidden_comment)
+                                round_new_comments += 1
+                
+                if checked_replies > 0:
+                    print(f"     檢查了 {checked_replies} 條子評論")
 
                 if new_comments_found:
+                    total_new_comments += len(new_comments_found)
                     # 对新评论按时间排序
                     sorted_comments = sorted(new_comments_found, key=lambda x: x['time'])
 
@@ -393,10 +686,25 @@ def start_monitoring(targets_to_monitor, header, interval, webhook_enabled):
                     # 如果启用了 Webhook，则发送通知
                     if webhook_enabled:
                         notifier.send_webhook_notification(title, sorted_comments)
+                else:
+                    print(f"     ✓ 暫無新評論")
 
                 time.sleep(3)  # 检查完一个视频后短暂休息，防止请求过快
+            
+            # 每輪檢查結束後顯示統計
+            print(f"\n📊 第 {check_count} 輪檢查完成統計:")
+            print(f"   - 監控視頻數: {len(video_targets)}")
+            print(f"   - 本輪新評論: {round_new_comments}")
+            print(f"   - 總新評論數: {total_new_comments}")
+            if enable_dynamic_monitor:
+                dynamic_count = len(db.get_dynamic_video_bvids())
+                print(f"   - 動態視頻數: {dynamic_count}")
+            
+            # 獲取當前時間段應該的監控間隔
+            current_interval, schedule_name = db.get_current_interval()
+            print(f"   - 當前時間段: {schedule_name} ({current_interval}秒)")
 
-            wait_with_manual_trigger(interval)
+            wait_with_manual_trigger(current_interval)
 
         except KeyboardInterrupt:
             print("\n程序被用户手动中断 (Ctrl+C)。再见！")
@@ -454,8 +762,50 @@ if __name__ == "__main__":
             print("\n提示：未找到有效的 'webhook_config.txt' 文件，Webhook 通知功能将保持禁用。")
             print("如需启用，请创建该文件并在其中填入您的 Webhook URL。")
         # ^^^ 新增 ^^^
+        
+        # vvv 新增：用戶監控功能開關 vvv
+        enable_user_filter = False
+        enable_dynamic_monitor = False
+        
+        monitored_users = db.get_monitored_users()
+        if monitored_users:
+            print("\n" + "=" * 20 + " 用戶監控功能設置 " + "=" * 20)
+            
+            # 檢查是否有設置評論監控的用戶
+            comment_users = [u for u in monitored_users if u[2]]
+            if comment_users:
+                while True:
+                    filter_choice = input(f"\n檢測到 {len(comment_users)} 個評論監控用戶，是否只監控這些用戶的評論? (y/n): ").strip().lower()
+                    if filter_choice == 'y':
+                        enable_user_filter = True
+                        print("✅ 用戶評論過濾已啟用，將只監控指定用戶的評論。")
+                        break
+                    elif filter_choice == 'n':
+                        enable_user_filter = False
+                        print("❌ 用戶評論過濾已禁用，將監控所有評論。")
+                        break
+                    else:
+                        print("输入无效，请输入 'y' 或 'n'。")
+            
+            # 檢查是否有設置動態監控的用戶
+            dynamic_users = [u for u in monitored_users if u[3]]
+            if dynamic_users:
+                while True:
+                    dynamic_choice = input(f"\n檢測到 {len(dynamic_users)} 個動態監控用戶，是否自動添加他們的新視頻到監控列表? (y/n): ").strip().lower()
+                    if dynamic_choice == 'y':
+                        enable_dynamic_monitor = True
+                        print("✅ 動態視頻監控已啟用，將自動添加用戶新發布的視頻。")
+                        break
+                    elif dynamic_choice == 'n':
+                        enable_dynamic_monitor = False
+                        print("❌ 動態視頻監控已禁用。")
+                        break
+                    else:
+                        print("输入无效，请输入 'y' 或 'n'。")
+        # ^^^ 新增 ^^^
 
         header = get_header()
         # 修改：传入 webhook_enabled 参数
-        start_monitoring(targets, header, interval_seconds, webhook_enabled)
+        start_monitoring(targets, header, interval_seconds, webhook_enabled, 
+                        enable_user_filter, enable_dynamic_monitor)
 

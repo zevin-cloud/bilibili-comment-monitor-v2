@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B站评论监控器</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f5f5; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { text-align: center; color: #333; margin-bottom: 30px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .card { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .card h2 { color: #444; margin-bottom: 15px; font-size: 18px; border-bottom: 2px solid #00a1d6; padding-bottom: 10px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: #666; font-weight: bold; }
+        input[type="text"], input[type="number"], input[type="time"], select { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        .checkbox-group { display: flex; gap: 20px; margin-top: 5px; }
+        .checkbox-group label { display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer; }
+        button { background: #00a1d6; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 14px; transition: background 0.3s; }
+        button:hover { background: #0084b6; }
+        button.danger { background: #ff6b6b; }
+        button.danger:hover { background: #ee5a5a; }
+        button.success { background: #51cf66; }
+        button.success:hover { background: #40c057; }
+        .list { max-height: 300px; overflow-y: auto; margin-top: 15px; }
+        .list-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
+        .list-item:hover { background: #f9f9f9; }
+        .list-item-info { flex: 1; }
+        .list-item-title { font-weight: bold; color: #333; }
+        .list-item-subtitle { font-size: 12px; color: #999; margin-top: 2px; }
+        .list-item-actions { display: flex; gap: 5px; }
+        .btn-small { padding: 5px 10px; font-size: 12px; }
+        .status-bar { background: white; border-radius: 8px; padding: 15px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .status-indicator { display: flex; align-items: center; gap: 10px; }
+        .status-dot { width: 12px; height: 12px; border-radius: 50%; background: #ccc; }
+        .status-dot.running { background: #51cf66; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .logs-container { background: #1e1e1e; color: #d4d4d4; border-radius: 8px; padding: 15px; font-family: 'Consolas', monospace; font-size: 13px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word; }
+        .empty-state { text-align: center; color: #999; padding: 40px; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-left: 5px; }
+        .badge.comments { background: #e3f2fd; color: #1976d2; }
+        .badge.dynamic { background: #f3e5f5; color: #7b1fa2; }
+        .message { padding: 10px 15px; border-radius: 4px; margin-bottom: 15px; display: none; }
+        .message.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; display: block; }
+        .message.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; display: block; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 30px; border-radius: 8px; text-align: center; max-width: 400px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📺 B站评论监控器</h1>
+        <div id="message" class="message"></div>
+        
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div id="statusDot" class="status-dot"></div>
+                <span id="statusText">监控未运行</span>
+            </div>
+            <div>
+                <button id="startBtn" class="success" onclick="startMonitor()">▶ 开始监控</button>
+                <button id="stopBtn" class="danger" onclick="stopMonitor()" style="display:none;">⏹ 停止监控</button>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-indicator">
+                <span>🍪 Cookie:</span>
+                <span id="cookieStatus">检查中...</span>
+            </div>
+            <button class="btn-small" onclick="showLoginModal()">📱 扫码登录</button>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-indicator">
+                <span>⏰ 监控频率:</span>
+                <span id="currentInterval">加载中...</span>
+            </div>
+            <button class="btn-small" onclick="refreshCurrentInterval()">🔄 刷新</button>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>📹 视频管理</h2>
+                <div class="form-group">
+                    <label>BV号</label>
+                    <input type="text" id="videoBvId" placeholder="例如: BV1xx411c7mD">
+                </div>
+                <button onclick="addVideo()">➕ 添加视频</button>
+                <div class="list" id="videoList"><div class="empty-state">暂无视频</div></div>
+            </div>
+
+            <div class="card">
+                <h2>👤 用户管理</h2>
+                <div class="form-group">
+                    <label>用户UID</label>
+                    <input type="text" id="userMid" placeholder="例如: 208259">
+                </div>
+                <div class="form-group">
+                    <label>用户名(可选)</label>
+                    <input type="text" id="userName" placeholder="例如: 哔哩哔哩番剧">
+                </div>
+                <div class="form-group">
+                    <label>监控选项</label>
+                    <div class="checkbox-group">
+                        <label><input type="checkbox" id="monitorComments" checked> 评论</label>
+                        <label><input type="checkbox" id="monitorDynamic" checked> 动态</label>
+                    </div>
+                </div>
+                <button onclick="addUser()">➕ 添加用户</button>
+                <div class="list" id="userList"><div class="empty-state">暂无用户</div></div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 20px;">
+            <h2>⏰ 时间段配置</h2>
+            <div class="grid" style="grid-template-columns: 2fr 1fr 1fr 1fr 2fr; gap: 10px;">
+                <div class="form-group">
+                    <label>名称</label>
+                    <input type="text" id="scheduleName" placeholder="例如: 工作日高峰">
+                </div>
+                <div class="form-group">
+                    <label>开始</label>
+                    <input type="time" id="scheduleStart" value="08:00">
+                </div>
+                <div class="form-group">
+                    <label>结束</label>
+                    <input type="time" id="scheduleEnd" value="15:00">
+                </div>
+                <div class="form-group">
+                    <label>间隔(秒)</label>
+                    <input type="number" id="scheduleInterval" value="30" min="10">
+                </div>
+                <div class="form-group">
+                    <label>星期(多选)</label>
+                    <select id="scheduleDays" multiple style="height: 38px;">
+                        <option value="1" selected>周一</option>
+                        <option value="2" selected>周二</option>
+                        <option value="3" selected>周三</option>
+                        <option value="4" selected>周四</option>
+                        <option value="5" selected>周五</option>
+                        <option value="6">周六</option>
+                        <option value="0">周日</option>
+                    </select>
+                </div>
+            </div>
+            <button onclick="addSchedule()">➕ 添加时间段</button>
+            <div class="list" id="scheduleList"><div class="empty-state">暂无配置</div></div>
+        </div>
+
+        <div class="card">
+            <h2>📋 日志 <button class="btn-small" onclick="refreshLogs()">🔄 刷新</button></h2>
+            <div class="logs-container" id="logsContainer"><div class="empty-state">暂无日志</div></div>
+        </div>
+    </div>
+
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <h3>📱 扫码登录</h3>
+            <div id="qrcodeContainer" style="margin: 20px 0;"><p>加载中...</p></div>
+            <div id="loginStatus" style="color: #666;"></div>
+            <button class="btn-small" onclick="closeLoginModal()" style="margin-top: 10px;">取消</button>
+        </div>
+    </div>
+
+    <script>
+        // 页面加载
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAllData();
+            setInterval(checkStatus, 5000);
+            setInterval(refreshLogs, 10000);
+            setInterval(refreshCurrentInterval, 30000);
+            setInterval(checkCookieStatus, 60000);
+        });
+
+        function loadAllData() {
+            loadVideos();
+            loadUsers();
+            loadSchedules();
+            checkStatus();
+            refreshLogs();
+            refreshCurrentInterval();
+            checkCookieStatus();
+        }
+
+        function showMessage(text, type) {
+            const msg = document.getElementById('message');
+            msg.textContent = text;
+            msg.className = 'message ' + type;
+            setTimeout(() => msg.className = 'message', 3000);
+        }
+
+        // 视频管理
+        async function loadVideos() {
+            try {
+                const r = await fetch('/api/videos');
+                const videos = await r.json();
+                const container = document.getElementById('videoList');
+                if (videos.length === 0) {
+                    container.innerHTML = '<div class="empty-state">暂无视频</div>';
+                    return;
+                }
+                container.innerHTML = videos.map(v => `
+                    <div class="list-item">
+                        <div class="list-item-info">
+                            <div class="list-item-title">${v.title}</div>
+                            <div class="list-item-subtitle">${v.bv_id}</div>
+                        </div>
+                        <div class="list-item-actions">
+                            <button class="btn-small danger" onclick="deleteVideo('${v.oid}')">删除</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('加载视频失败:', e);
+            }
+        }
+
+        async function addVideo() {
+            const bvId = document.getElementById('videoBvId').value.trim();
+            if (!bvId) return showMessage('请输入BV号', 'error');
+            
+            try {
+                const r = await fetch('/api/videos', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({bv_id: bvId})
+                });
+                const result = await r.json();
+                if (result.success) {
+                    showMessage(result.message, 'success');
+                    document.getElementById('videoBvId').value = '';
+                    loadVideos();
+                } else {
+                    showMessage(result.error || '添加失败', 'error');
+                }
+            } catch (e) {
+                showMessage('添加失败: ' + e.message, 'error');
+            }
+        }
+
+        async function deleteVideo(oid) {
+            if (!confirm('确定删除这个视频吗？')) return;
+            try {
+                const r = await fetch(`/api/videos/${oid}`, {method: 'DELETE'});
+                const result = await r.json();
+                if (result.success) {
+                    showMessage('删除成功', 'success');
+                    loadVideos();
+                } else {
+                    showMessage('删除失败', 'error');
+                }
+            } catch (e) {
+                showMessage('删除失败: ' + e.message, 'error');
+            }
+        }
+
+        // 用户管理
+        async function loadUsers() {
+            try {
+                const r = await fetch('/api/users');
+                const users = await r.json();
+                const container = document.getElementById('userList');
+                if (users.length === 0) {
+                    container.innerHTML = '<div class="empty-state">暂无用户</div>';
+                    return;
+                }
+                container.innerHTML = users.map(u => `
+                    <div class="list-item">
+                        <div class="list-item-info">
+                            <div class="list-item-title">
+                                ${u.uname || '未知'}
+                                ${u.monitor_comments ? '<span class="badge comments">评论</span>' : ''}
+                                ${u.monitor_dynamic ? '<span class="badge dynamic">动态</span>' : ''}
+                            </div>
+                            <div class="list-item-subtitle">UID: ${u.mid}</div>
+                        </div>
+                        <div class="list-item-actions">
+                            <button class="btn-small danger" onclick="deleteUser('${u.mid}')">删除</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('加载用户失败:', e);
+            }
+        }
+
+        async function addUser() {
+            const mid = document.getElementById('userMid').value.trim();
+            const uname = document.getElementById('userName').value.trim();
+            const monitorComments = document.getElementById('monitorComments').checked;
+            const monitorDynamic = document.getElementById('monitorDynamic').checked;
+            
+            if (!mid) return showMessage('请输入UID', 'error');
+            
+            try {
+                const r = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({mid, uname, monitor_comments: monitorComments, monitor_dynamic: monitorDynamic})
+                });
+                const result = await r.json();
+                if (result.success) {
+                    showMessage('添加成功', 'success');
+                    document.getElementById('userMid').value = '';
+                    document.getElementById('userName').value = '';
+                    loadUsers();
+                } else {
+                    showMessage(result.error || '添加失败', 'error');
+                }
+            } catch (e) {
+                showMessage('添加失败: ' + e.message, 'error');
+            }
+        }
+
+        async function deleteUser(mid) {
+            if (!confirm('确定删除这个用户吗？')) return;
+            try {
+                const r = await fetch(`/api/users/${mid}`, {method: 'DELETE'});
+                const result = await r.json();
+                if (result.success) {
+                    showMessage('删除成功', 'success');
+                    loadUsers();
+                } else {
+                    showMessage('删除失败', 'error');
+                }
+            } catch (e) {
+                showMessage('删除失败: ' + e.message, 'error');
+            }
+        }
+
+        // 时间段配置
+        async function loadSchedules() {
+            try {
+                // 添加时间戳防止缓存
+                const r = await fetch('/api/schedules?t=' + Date.now());
+                const schedules = await r.json();
+                console.log('加载时间段,数量:', schedules.length);
+                const container = document.getElementById('scheduleList');
+                if (schedules.length === 0) {
+                    container.innerHTML = '<div class="empty-state">暂无配置</div>';
+                    return;
+                }
+                const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+                container.innerHTML = schedules.map(s => {
+                    const days = s.days_of_week.split(',').map(d => weekDays[parseInt(d)]).join(',');
+                    return `
+                        <div class="list-item">
+                            <div class="list-item-info">
+                                <div class="list-item-title">${s.name}</div>
+                                <div class="list-item-subtitle">${s.start_time}-${s.end_time} | ${days} | ${s.interval_seconds}秒</div>
+                            </div>
+                            <div class="list-item-actions">
+                                <button class="btn-small danger" onclick="deleteSchedule(${s.id})">删除</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) {
+                console.error('加载时间段失败:', e);
+            }
+        }
+
+        async function addSchedule() {
+            const name = document.getElementById('scheduleName').value.trim();
+            const startTime = document.getElementById('scheduleStart').value;
+            const endTime = document.getElementById('scheduleEnd').value;
+            const interval = parseInt(document.getElementById('scheduleInterval').value);
+            const daysSelect = document.getElementById('scheduleDays');
+            const days = Array.from(daysSelect.selectedOptions).map(o => o.value).join(',');
+            
+            if (!name || !startTime || !endTime || !interval || !days) {
+                return showMessage('请填写所有字段', 'error');
+            }
+            
+            try {
+                const r = await fetch('/api/schedules', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name, start_time: startTime, end_time: endTime, days_of_week: days, interval_seconds: interval})
+                });
+                const result = await r.json();
+                if (result.success) {
+                    showMessage('添加成功', 'success');
+                    document.getElementById('scheduleName').value = '';
+                    loadSchedules();
+                    refreshCurrentInterval();
+                } else {
+                    showMessage(result.error || '添加失败', 'error');
+                }
+            } catch (e) {
+                showMessage('添加失败: ' + e.message, 'error');
+            }
+        }
+
+        async function deleteSchedule(id) {
+            if (!confirm('确定删除这个时间段配置吗？')) return;
+            try {
+                const r = await fetch(`/api/schedules/${id}`, {method: 'DELETE'});
+                const result = await r.json();
+                console.log('删除时间段结果:', result);
+                if (result.success) {
+                    showMessage('删除成功', 'success');
+                    // 强制刷新
+                    await loadSchedules();
+                    await refreshCurrentInterval();
+                    // 再次刷新确保更新
+                    setTimeout(loadSchedules, 500);
+                } else {
+                    showMessage('删除失败: ' + (result.error || ''), 'error');
+                }
+            } catch (e) {
+                console.error('删除时间段出错:', e);
+                showMessage('删除失败: ' + e.message, 'error');
+            }
+        }
+
+        // 监控状态
+        async function checkStatus() {
+            try {
+                const r = await fetch('/api/monitor/status');
+                const status = await r.json();
+                const dot = document.getElementById('statusDot');
+                const text = document.getElementById('statusText');
+                const startBtn = document.getElementById('startBtn');
+                const stopBtn = document.getElementById('stopBtn');
+                
+                if (status.running) {
+                    dot.classList.add('running');
+                    text.textContent = `运行中 (PID: ${status.pid})`;
+                    startBtn.style.display = 'none';
+                    stopBtn.style.display = 'inline-block';
+                } else {
+                    dot.classList.remove('running');
+                    text.textContent = '监控未运行';
+                    startBtn.style.display = 'inline-block';
+                    stopBtn.style.display = 'none';
+                }
+            } catch (e) {
+                console.error('检查状态失败:', e);
+            }
+        }
+
+        async function startMonitor() {
+            try {
+                const r = await fetch('/api/monitor/start', {method: 'POST'});
+                const result = await r.json();
+                if (result.success) {
+                    showMessage('监控已启动', 'success');
+                    checkStatus();
+                } else {
+                    showMessage(result.error || '启动失败', 'error');
+                }
+            } catch (e) {
+                showMessage('启动失败: ' + e.message, 'error');
+            }
+        }
+
+        async function stopMonitor() {
+            try {
+                const r = await fetch('/api/monitor/stop', {method: 'POST'});
+                const result = await r.json();
+                if (result.success) {
+                    showMessage('监控已停止', 'success');
+                    checkStatus();
+                } else {
+                    showMessage(result.error || '停止失败', 'error');
+                }
+            } catch (e) {
+                showMessage('停止失败: ' + e.message, 'error');
+            }
+        }
+
+        // Cookie和登录
+        async function checkCookieStatus() {
+            try {
+                const r = await fetch('/api/cookie-status');
+                const data = await r.json();
+                const el = document.getElementById('cookieStatus');
+                if (data.valid) {
+                    el.textContent = `✅ ${data.user_info?.uname || '有效'}`;
+                    el.style.color = '#51cf66';
+                } else {
+                    el.textContent = '❌ 无效';
+                    el.style.color = '#ff6b6b';
+                }
+            } catch (e) {
+                console.error('检查Cookie失败:', e);
+            }
+        }
+
+        async function refreshCurrentInterval() {
+            try {
+                const r = await fetch('/api/current-interval');
+                const data = await r.json();
+                document.getElementById('currentInterval').textContent = `${data.schedule_name} (${data.interval_seconds}秒)`;
+            } catch (e) {
+                console.error('刷新间隔失败:', e);
+            }
+        }
+
+        async function refreshLogs() {
+            try {
+                const r = await fetch('/api/logs');
+                const data = await r.json();
+                const container = document.getElementById('logsContainer');
+                if (!data.logs || data.logs.length === 0) {
+                    container.innerHTML = '<div class="empty-state">暂无日志</div>';
+                    return;
+                }
+                container.innerHTML = data.logs.map(line => `<div>${line}</div>`).join('');
+                container.scrollTop = container.scrollHeight;
+            } catch (e) {
+                console.error('刷新日志失败:', e);
+            }
+        }
+
+        // 登录弹窗
+        let loginInterval = null;
+        
+        async function showLoginModal() {
+            document.getElementById('loginModal').style.display = 'flex';
+            document.getElementById('qrcodeContainer').innerHTML = '<p>生成二维码...</p>';
+            document.getElementById('loginStatus').textContent = '';
+            
+            try {
+                const r = await fetch('/api/login/qrcode', {method: 'POST'});
+                const result = await r.json();
+                if (result.success) {
+                    document.getElementById('qrcodeContainer').innerHTML = `<img src="${result.img_path}?t=${Date.now()}" style="max-width: 200px;">`;
+                    startLoginPolling();
+                } else {
+                    document.getElementById('qrcodeContainer').innerHTML = `<p style="color:red">${result.error}</p>`;
+                }
+            } catch (e) {
+                document.getElementById('qrcodeContainer').innerHTML = `<p style="color:red">错误: ${e.message}</p>`;
+            }
+        }
+
+        function startLoginPolling() {
+            if (loginInterval) clearInterval(loginInterval);
+            let count = 0;
+            loginInterval = setInterval(async () => {
+                count++;
+                if (count > 90) {
+                    clearInterval(loginInterval);
+                    document.getElementById('loginStatus').textContent = '超时';
+                    return;
+                }
+                try {
+                    const r = await fetch('/api/login/poll', {method: 'POST'});
+                    const result = await r.json();
+                    if (result.success) {
+                        clearInterval(loginInterval);
+                        document.getElementById('loginStatus').textContent = '✅ 登录成功';
+                        setTimeout(() => { closeLoginModal(); checkCookieStatus(); showMessage('登录成功', 'success'); }, 1000);
+                    } else if (result.status === 'scanned') {
+                        document.getElementById('loginStatus').textContent = '已扫描,请确认';
+                    }
+                } catch (e) {}
+            }, 2000);
+        }
+
+        function closeLoginModal() {
+            document.getElementById('loginModal').style.display = 'none';
+            if (loginInterval) clearInterval(loginInterval);
+            fetch('/api/login/cancel', {method: 'POST'}).catch(() => {});
+        }
+    </script>
+</body>
+</html>

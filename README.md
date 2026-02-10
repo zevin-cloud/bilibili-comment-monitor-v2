@@ -1,112 +1,161 @@
+# B站评论监控系统
 
----
+一个用于监控Bilibili视频评论的自动化工具，支持实时监控、用户动态追踪和企业微信Webhook通知。
 
-# B站评论区监控器 (增强版？)
+## 功能特性
 
-## 简介
+- **视频评论监控**: 实时监控指定视频的评论区，检测新评论
+- **用户动态追踪**: 自动获取监控用户的最新视频和动态
+- **指定用户过滤**: 可选择只监控特定用户的评论
+- **Webhook通知**: 支持企业微信、钉钉、飞书等平台的Webhook推送
+- **Web管理界面**: 提供友好的可视化操作界面
+- **自动登录**: 支持二维码扫码登录B站
 
-这是一个功能强大？的 Bilibili 视频评论区监控 Python 脚本。它能实时追踪您关注的视频下的新评论（包括所有楼中楼回复），并通过控制台和 **Webhook** 两种方式进行通知。
-
-此增强版新增了 **自动导入稿件** 功能：当您首次通过脚本登录后，它会自动获取您B站账号下的所有已发布视频，并将其加入监控列表，省去了手动添加的繁琐步骤。
-
-脚本支持自定义检查频率，并允许用户随时手动触发检查，还提供了完整的交互式菜单来管理监控列表，极大地提高了使用的灵活性和便利性。
-
-## 🚀 功能特性
-
-*   **实时监控**：自动检测指定 Bilibili 视频下的最新评论和回复。
-*   **Webhook 通知**：当发现新评论时，可自动通过 Webhook (支持飞书、钉钉、Discord 等) 发送格式化好的实时通知。
-*   **智能去重**：通过本地 SQLite 数据库记录已发现的评论 ID，确保程序重启也不会重复通知。
-*   **深度评论抓取**：能够智能检测并抓取所有分页的楼中楼回复，确保不遗漏任何被折叠的子评论。
-*   **交互式菜单**：提供友好的命令行菜单，方便地添加、移除和选择要监控的视频。
-*   **自动 Cookie 处理**：若 `bili_cookie.txt` 不存在或为空，脚本会自动尝试调用 `login_bilibili.py` 来完成登录并获取 Cookie。
-*   **自动导入稿件**：首次通过脚本登录后，会自动获取并添加您B站账号下的所有已发布视频到监控列表，免去手动添加的繁琐。
-*   **双重触发机制**：
-    *   **定时触发**：用户可自定义每次检查的间隔时间。
-    *   **手动触发**：在等待期间，可随时按 `Enter` 键立即开始新一轮检查。
-*   **跨平台兼容**：完美支持 Windows、Linux 和 macOS 系统。
-
-## 📂 文件结构
-
-为了使脚本正常工作，请确保以下文件位于同一个目录下：
+## 项目结构
 
 ```
-.
-├── main.py             # 监控主程序
-├── database.py         # 数据库操作模块
-├── notifier.py         # Webhook 通知模块
-├── bvget.py            # 获取用户稿件模块
-|
-├── login_bilibili.py   # (可选) B站登录脚本，用于自动获取Cookie
-|
-├── webhook_config.txt  # (需手动创建) 用于存放你的 Webhook URL
-├── bili_cookie.txt     # (自动或手动创建) 存储登录后的Cookie
-└── bili_monitor.db     # (自动生成) SQLite数据库文件
+bilibili-comment/
+├── auto_monitor.py      # 自动监控脚本（核心）
+├── web_server.py        # Web服务器和API
+├── main.py             # B站API交互模块
+├── database.py         # 数据库操作
+├── user_monitor.py     # 用户动态监控
+├── notifier.py         # Webhook通知
+├── cookie_checker.py   # Cookie验证
+├── bvget.py           # BV号获取工具
+├── templates/
+│   └── index.html     # Web界面
+├── requirements.txt    # 依赖列表
+└── README.md          # 项目说明
 ```
 
-## 🛠️ 安装与设置
+## 安装部署
 
-### 1. 准备环境
-
-确保您的系统已安装 **Python 3.6+** 和 **pip** 包管理器。
-
-### 2. 下载文件
-
-将 `main.py`, `database.py`, `notifier.py`, `bvget.py` 和 `login_bilibili.py` (可选) 文件下载到同一个文件夹中。
-
-### 3. 安装依赖库
-
-打开您的终端或命令提示符，进入项目文件夹，然后运行以下命令来安装所有必需的库：
+### 1. 克隆仓库
 
 ```bash
-pip install requests pandas
+git clone https://github.com/yourusername/bilibili-comment.git
+cd bilibili-comment
 ```
 
-*   `requests`: 用于发送 HTTP 请求，与 Bilibili API 和 Webhook URL 交互。
-*   `pandas`: 用于处理时间戳，将其转换为易于阅读的日期时间格式。
+### 2. 安装依赖
 
-## 📖 使用方法
+```bash
+pip install -r requirements.txt
+```
 
-1.  **配置 Webhook (可选，但推荐)**
-    *   在项目文件夹中，手动创建一个名为 `webhook_config.txt` 的文件。
-    *   将您的 Webhook URL 完整地粘贴到该文件中并保存。**文件中只应包含 URL 本身**。
-    *   如果此文件不存在或为空，Webhook 通知功能将自动禁用。
+### 3. 配置Cookie
 
-2.  **准备 Bilibili Cookie**
-    *   **方法一 (推荐)：自动获取**
-        *   确保 `login_bilibili.py` 与主程序在同一目录。
-        *   **首次使用时，请先删除旧的 `bili_cookie.txt` 文件 (如有)。**
-        *   直接运行 `main.py`，脚本会自动调用登录程序，请按提示扫码登录。
-        *   登录成功后，脚本会触发 **自动导入稿件** 功能，将您账号下的所有视频添加至数据库。
-    *   **方法二：手动配置**
-        *   在项目文件夹中创建 `bili_cookie.txt` 文件。
-        *   登录 Bilibili 网站，使用浏览器开发者工具 (`F12`) 获取您的 `Cookie` 值，并将其完整粘贴到文件中。
-        *   **注意**：此方法不会触发自动导入稿件功能。
+**方式一：自动登录（推荐）**
+1. 启动Web服务器：`python web_server.py`
+2. 访问 `http://localhost:5000`
+3. 点击"登录B站"按钮，扫描二维码
 
-3.  **运行监控器**
-    在终端中，导航到项目文件夹，然后运行：
-    ```bash
-    python main.py
-    ```
+**方式二：手动配置**
+1. 浏览器登录B站
+2. F12打开开发者工具 → Application/Storage → Cookies
+3. 复制所有Cookie内容
+4. 粘贴到 `bili_cookie.txt` 文件中
 
-4.  **交互式菜单操作**
-    *   **添加视频 (`a`)**: 输入 `a`，然后输入 B站视频的 BV 号（支持用逗号或空格批量添加）。
-    *   **移除视频 (`r`)**: 输入 `r`，然后输入列表中视频对应的编号以将其从数据库移除。
-    *   **选择视频 (`数字`)**: 输入视频列表前的数字（如 `1` 或 `1,3`）来选择本次要监控的视频。
-    *   **开始监控 (`s`)**: 选择好视频后，输入 `s` 继续。
-    *   **退出程序 (`q`)**: 输入 `q` 退出。
+### 4. 配置Webhook通知（可选）
 
-5.  **启动监控**
-    *   **启用 Webhook**：如果您已配置 `webhook_config.txt`，脚本会询问您是否启用通知，输入 `y` 即可。
-    *   **设置检查间隔**：脚本会提示您输入检查间隔（分钟）。您可以输入数字，或直接按 `Enter` 使用默认的 5 分钟。
-    *   **手动触发**：在监控循环的等待期间，您可以随时按下 `Enter` 键，立即开始新一轮的评论检查。
+创建 `webhook_config.txt` 文件，填入Webhook地址：
 
-## ⚠️ 注意事项
+```
+https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=your_key_here
+```
 
-*   **Webhook 安全**：请勿将包含您的 Webhook URL 的 `webhook_config.txt` 文件泄露给他人。
-*   **Cookie 有效性**：Bilibili 的 Cookie 会过期。如果脚本提示 Cookie 错误或无法获取信息，请删除 `bili_cookie.txt` 并重新运行脚本以自动登录，或手动更新其中的值。
-*   **请求频率**：请勿将检查间隔设置得过短（脚本已限制最低 30 秒），以免对 Bilibili 服务器造成不必要的负担，或导致您的 IP 被暂时限制。
-*   **数据库文件**：脚本会自动创建和管理 `bili_monitor.db` 文件。请勿随意删除，否则会丢失所有已监控视频的配置和历史评论记录。
+支持平台：
+- 企业微信
+- 钉钉
+- 飞书
+- Discord
+- Slack
+
+## 使用方法
+
+### 启动Web界面
+
+```bash
+python web_server.py
+```
+
+访问 `http://localhost:5000` 打开管理界面
+
+### 功能说明
+
+#### 1. 添加监控视频
+- 在"添加视频"区域输入BV号（如：`BV1mg4y13713`）
+- 点击"添加视频"按钮
+
+#### 2. 添加监控用户
+- 在"添加用户"区域输入用户ID（MID）
+- 可选择是否监控评论和动态
+- 点击"添加用户"按钮
+
+#### 3. 开始监控
+- 点击"开始监控"按钮启动自动监控
+- 系统会每30秒检查一次新评论
+- 新评论会自动显示在日志区域
+
+#### 4. 查看日志
+- 日志区域实时显示监控状态
+- 包括新评论、系统状态等信息
+
+## API接口
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/videos` | GET/POST/DELETE | 视频管理 |
+| `/api/users` | GET/POST/DELETE | 用户管理 |
+| `/api/monitor/start` | POST | 开始监控 |
+| `/api/monitor/stop` | POST | 停止监控 |
+| `/api/monitor/status` | GET | 监控状态 |
+| `/api/logs` | GET | 获取日志 |
+| `/api/cookie-status` | GET | Cookie状态 |
+| `/api/login/qrcode` | POST | 获取登录二维码 |
+| `/api/login/status` | GET | 登录状态 |
+
+## 数据库说明
+
+使用SQLite数据库，包含以下表：
+
+- `monitored_videos`: 监控的视频列表
+- `monitored_users`: 监控的用户列表
+- `seen_comments`: 已记录的评论（避免重复通知）
+- `dynamic_videos`: 从动态获取的视频
+- `schedules`: 监控时间表配置
+
+## 监控频率
+
+支持按时间段自动调整监控频率：
+
+- **工作日高峰时段**（9:00-21:00）: 30秒
+- **工作日低峰时段**（21:00-9:00）: 5分钟
+- **周末高峰时段**（10:00-22:00）: 30秒
+- **周末低峰时段**（22:00-10:00）: 5分钟
+
+## 注意事项
+
+1. **Cookie有效期**: B站Cookie会过期，需要定期重新登录
+2. **API限制**: 频繁请求可能导致IP被限制，请合理设置监控频率
+3. **隐私安全**: 请勿将包含Cookie的配置文件上传到公开仓库
+
+## 技术栈
+
+- **后端**: Python + Flask
+- **前端**: HTML + JavaScript (原生)
+- **数据库**: SQLite
+- **HTTP请求**: requests
 
 ## 许可证
 
-本项目采用 MIT 许可证。
+MIT License
+
+## 贡献
+
+欢迎提交Issue和Pull Request！
+
+## 免责声明
+
+本项目仅供学习交流使用，请勿用于非法用途。使用本项目产生的任何后果由使用者自行承担。
