@@ -7,7 +7,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./data:/app/data
+      - ./bilibili_monitor.db:/app/bilibili_monitor.db
       - ./bili_cookie.txt:/app/bili_cookie.txt
       - ./webhook_config.txt:/app/webhook_config.txt
     environment:

@@ -94,6 +94,19 @@
             <div class="card">
                 <h2>👤 用户管理</h2>
                 <div class="form-group">
+                    <label>搜索用户名</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="searchKeyword" placeholder="输入用户名搜索" style="flex: 1;">
+                        <button onclick="searchUser()" style="white-space: nowrap;">🔍 搜索</button>
+                    </div>
+                </div>
+                <div class="form-group" id="searchResults" style="display: none;">
+                    <label>搜索结果</label>
+                    <select id="searchResultSelect" style="width: 100%;" onchange="selectSearchResult()">
+                        <option value="">-- 选择用户 --</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label>用户UID</label>
                     <input type="text" id="userMid" placeholder="例如: 208259">
                 </div>
@@ -286,6 +299,41 @@
             }
         }
 
+        // 搜索用户
+        async function searchUser() {
+            const keyword = document.getElementById('searchKeyword').value.trim();
+            if (!keyword) return showMessage('请输入搜索关键词', 'error');
+            
+            try {
+                const r = await fetch(`/api/users/search?keyword=${encodeURIComponent(keyword)}`);
+                const result = await r.json();
+                if (result.success && result.users.length > 0) {
+                    const select = document.getElementById('searchResultSelect');
+                    select.innerHTML = '<option value="">-- 选择用户 --</option>';
+                    result.users.forEach(user => {
+                        select.innerHTML += `<option value="${user.mid}" data-uname="${user.uname}">${user.uname} (UID: ${user.mid})</option>`;
+                    });
+                    document.getElementById('searchResults').style.display = 'block';
+                    showMessage(`找到 ${result.users.length} 个用户`, 'success');
+                } else {
+                    showMessage('未找到用户', 'error');
+                    document.getElementById('searchResults').style.display = 'none';
+                }
+            } catch (e) {
+                showMessage('搜索失败: ' + e.message, 'error');
+            }
+        }
+        
+        // 选择搜索结果
+        function selectSearchResult() {
+            const select = document.getElementById('searchResultSelect');
+            const selectedOption = select.options[select.selectedIndex];
+            if (selectedOption.value) {
+                document.getElementById('userMid').value = selectedOption.value;
+                document.getElementById('userName').value = selectedOption.getAttribute('data-uname');
+            }
+        }
+
         async function addUser() {
             const mid = document.getElementById('userMid').value.trim();
             const uname = document.getElementById('userName').value.trim();
@@ -302,9 +350,11 @@
                 });
                 const result = await r.json();
                 if (result.success) {
-                    showMessage('添加成功', 'success');
+                    showMessage('添加成功' + (result.uname ? `: ${result.uname}` : ''), 'success');
                     document.getElementById('userMid').value = '';
                     document.getElementById('userName').value = '';
+                    document.getElementById('searchKeyword').value = '';
+                    document.getElementById('searchResults').style.display = 'none';
                     loadUsers();
                 } else {
                     showMessage(result.error || '添加失败', 'error');

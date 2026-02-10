@@ -7,6 +7,10 @@ import subprocess
 import sys
 import threading
 import time
+import requests
+
+# 导入用户监控模块
+import user_monitor
 
 app = Flask(__name__)
 
@@ -98,6 +102,30 @@ def get_users():
         'monitor_dynamic': bool(u[3])
     } for u in users])
 
+@app.route('/api/users/search', methods=['GET'])
+def search_user():
+    """通过用户名搜索用户"""
+    keyword = request.args.get('keyword', '')
+    if not keyword:
+        return jsonify({'success': False, 'error': '搜索关键词不能为空'})
+    
+    try:
+        # 创建请求头
+        header = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://search.bilibili.com'
+        }
+        
+        # 调用搜索函数
+        users = user_monitor.search_user_by_keyword(keyword, header)
+        
+        return jsonify({
+            'success': True,
+            'users': [{'mid': mid, 'uname': uname} for mid, uname in users[:10]]  # 最多返回10个
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 @app.route('/api/users', methods=['POST'])
 def add_user():
     """添加监控用户"""
@@ -110,10 +138,21 @@ def add_user():
     if not mid:
         return jsonify({'success': False, 'error': '用户ID不能为空'})
     
+    # 如果没有提供用户名，尝试获取
+    if not uname:
+        try:
+            header = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Referer': 'https://space.bilibili.com'
+            }
+            uname, _ = user_monitor.get_user_info(mid, header)
+        except:
+            uname = ''
+    
     success = db.add_monitored_user(mid, uname, 
                                    1 if monitor_comments else 0,
                                    1 if monitor_dynamic else 0)
-    return jsonify({'success': success})
+    return jsonify({'success': success, 'uname': uname})
 
 @app.route('/api/users/<mid>', methods=['DELETE'])
 def delete_user(mid):
