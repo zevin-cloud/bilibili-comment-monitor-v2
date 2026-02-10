@@ -126,14 +126,68 @@ def md5(code):
     return MD5.hexdigest()
 
 
+def get_wbi_keys(header):
+    """动态获取 WBI 签名所需的 img_key 和 sub_key"""
+    try:
+        resp = requests.get("https://api.bilibili.com/x/web-interface/nav", headers=header, timeout=5)
+        resp.raise_for_status()
+        json_content = resp.json()
+        img_url = json_content['data']['wbi_img']['img_url']
+        sub_url = json_content['data']['wbi_img']['sub_url']
+        img_key = img_url.rsplit('/', 1)[1].split('.')[0]
+        sub_key = sub_url.rsplit('/', 1)[1].split('.')[0]
+        return img_key, sub_key
+    except Exception as e:
+        print(f"动态获取 WBI keys 失败: {e}，将使用备用盐值")
+        return None, None
+
+def enc_wbi(params, img_key, sub_key):
+    """为请求参数添加 WBI 签名"""
+    mixin_key_enc_tab = [
+        46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49,
+        33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40,
+        61, 26, 17, 0, 1, 60, 51, 30, 4, 22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11,
+        36, 20, 34, 44, 52
+    ]
+    raw_key = img_key + sub_key
+    mixin_key = "".join([raw_key[i] for i in mixin_key_enc_tab])[:32]
+    curr_time = int(time.time())
+    params['wts'] = curr_time
+    params = dict(sorted(params.items()))
+    # 过滤特殊字符
+    params = {
+        k: "".join([char for char in str(v) if char not in "!'()*"])
+        for k, v in params.items()
+    }
+    query = urllib.parse.urlencode(params)
+    w_rid = hashlib.md5((query + mixin_key).encode()).hexdigest()
+    params['w_rid'] = w_rid
+    return params
+
 def fetch_latest_comments(oid, header):
     """抓取给定视频 oid 的第一页最新评论 (顶层评论)。"""
     if not oid: return []
-    mixin_key_salt = "ea1db124af3c7062474693fa704f4ff8"
-    params = {'oid': oid, 'type': 1, 'mode': 2, 'plat': 1, 'web_location': 1315875, 'wts': int(time.time())}
-    query_for_w_rid = urllib.parse.urlencode(sorted(params.items()))
-    w_rid = md5(query_for_w_rid + mixin_key_salt)
-    params['w_rid'] = w_rid
+    
+    # 动态获取 keys
+    img_key, sub_key = get_wbi_keys(header)
+    
+    params = {
+        'oid': oid,
+        'type': 1,
+        'mode': 2,
+        'plat': 1,
+        'web_location': 1315875
+    }
+    
+    if img_key and sub_key:
+        params = enc_wbi(params, img_key, sub_key)
+    else:
+        # 退回到旧的硬编码方式（备用）
+        mixin_key_salt = "ea1db124af3c7062474693fa704f4ff8"
+        params['wts'] = int(time.time())
+        query_for_w_rid = urllib.parse.urlencode(sorted(params.items()))
+        params['w_rid'] = md5(query_for_w_rid + mixin_key_salt)
+
     url = f"https://api.bilibili.com/x/v2/reply/wbi/main?{urllib.parse.urlencode(params)}"
     try:
         response = requests.get(url, headers=header, timeout=5)
@@ -640,7 +694,7 @@ def start_monitoring(targets_to_monitor, header, interval, webhook_enabled, enab
                     if comment.get('replies'):
                         replies = comment['replies']
                         checked_replies += len(replies)
-                        for sub_reply in sub_reply in comment['replies']:
+                        for sub_reply in replies:
                             new_sub_comment = process_and_notify_comment(sub_reply, oid, seen_ids,
                                                                          parent_user_name=comment['member']['uname'],
                                                                          filter_user_mids=filter_user_mids)
