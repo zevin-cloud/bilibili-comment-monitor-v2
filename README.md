@@ -25,26 +25,80 @@ bilibili-comment/
 ├── bvget.py           # BV号获取工具
 ├── templates/
 │   └── index.html     # Web界面
-├── requirements.txt    # 依赖列表
-└── README.md          # 项目说明
+├── Dockerfile         # Docker镜像构建文件
+├── docker-compose.yml # Docker Compose配置
+├── requirements.txt   # 依赖列表
+├── .gitignore        # Git忽略文件
+└── README.md         # 项目说明
 ```
 
 ## 安装部署
 
-### 1. 克隆仓库
+### 方式一：Docker部署（推荐）
+
+#### 1. 克隆仓库
 
 ```bash
 git clone https://github.com/yourusername/bilibili-comment.git
 cd bilibili-comment
 ```
 
-### 2. 安装依赖
+#### 2. 配置环境
+
+创建配置文件：
+
+```bash
+# 创建Cookie文件（先留空，启动后通过Web界面登录）
+touch bili_cookie.txt
+
+# 配置Webhook（可选）
+echo "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=your_key" > webhook_config.txt
+```
+
+#### 3. 启动容器
+
+```bash
+docker-compose up -d
+```
+
+#### 4. 访问Web界面
+
+打开浏览器访问 `http://localhost:5000`
+
+#### Docker常用命令
+
+```bash
+# 查看日志
+docker-compose logs -f
+
+# 停止服务
+docker-compose down
+
+# 重启服务
+docker-compose restart
+
+# 更新镜像后重新构建
+docker-compose up -d --build
+```
+
+---
+
+### 方式二：本地部署
+
+#### 1. 克隆仓库
+
+```bash
+git clone https://github.com/yourusername/bilibili-comment.git
+cd bilibili-comment
+```
+
+#### 2. 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. 配置Cookie
+#### 3. 配置Cookie
 
 **方式一：自动登录（推荐）**
 1. 启动Web服务器：`python web_server.py`
@@ -57,7 +111,7 @@ pip install -r requirements.txt
 3. 复制所有Cookie内容
 4. 粘贴到 `bili_cookie.txt` 文件中
 
-### 4. 配置Webhook通知（可选）
+#### 4. 配置Webhook通知（可选）
 
 创建 `webhook_config.txt` 文件，填入Webhook地址：
 

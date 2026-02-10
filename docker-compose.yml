@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  bilibili-comment:
+    build: .
+    container_name: bilibili-comment
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+      - ./bili_cookie.txt:/app/bili_cookie.txt
+      - ./webhook_config.txt:/app/webhook_config.txt
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
