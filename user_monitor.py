@@ -229,3 +229,111 @@ def search_user_by_keyword(keyword, header):
         print(f"搜索用戶時出錯: {e}")
     
     return users
+
+
+def fetch_dynamic_comments(dynamic_id, header, next_offset=0):
+    """
+    获取动态的评论列表。
+    
+    Args:
+        dynamic_id: 动态ID
+        header: 请求头
+        next_offset: 分页偏移量
+        
+    Returns:
+        {
+            'comments': [{
+                'rpid': 评论ID,
+                'mid': 用户MID,
+                'uname': 用户名,
+                'message': 评论内容,
+                'ctime': 发布时间
+            }, ...],
+            'next_offset': 下一页偏移量,
+            'has_more': 是否还有更多
+        }
+    """
+    comments = []
+    has_more = False
+    new_next_offset = 0
+    
+    url = "https://api.bilibili.com/x/v2/reply/main"
+    params = {
+        'oid': dynamic_id,
+        'type': 17,  # 动态评论类型
+        'next': next_offset,
+        'ps': 20
+    }
+    
+    try:
+        header_copy = header.copy()
+        header_copy['Referer'] = f'https://t.bilibili.com/{dynamic_id}'
+        
+        resp = requests.get(url, headers=header_copy, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        
+        if data.get('code') == 0:
+            reply_data = data.get('data', {})
+            replies = reply_data.get('replies', [])
+            
+            for reply in replies:
+                member = reply.get('member', {})
+                content = reply.get('content', {})
+                
+                comments.append({
+                    'rpid': str(reply.get('rpid', '')),
+                    'mid': str(member.get('mid', '')),
+                    'uname': member.get('uname', ''),
+                    'message': content.get('message', ''),
+                    'ctime': reply.get('ctime', 0)
+                })
+            
+            # 检查是否还有更多评论
+            cursor = reply_data.get('cursor', {})
+            has_more = cursor.get('is_end', True) == False
+            new_next_offset = cursor.get('next_offset', 0)
+        else:
+            print(f"获取动态 {dynamic_id} 评论失败: {data.get('message', '未知错误')}")
+            
+    except Exception as e:
+        print(f"请求动态 {dynamic_id} 评论时出错: {e}")
+    
+    return {
+        'comments': comments,
+        'next_offset': new_next_offset,
+        'has_more': has_more
+    }
+
+
+def fetch_all_dynamic_comments(dynamic_id, header):
+    """
+    获取动态的所有评论。
+    
+    Args:
+        dynamic_id: 动态ID
+        header: 请求头
+        
+    Returns:
+        [{
+            'rpid': 评论ID,
+            'mid': 用户MID,
+            'uname': 用户名,
+            'message': 评论内容,
+            'ctime': 发布时间
+        }, ...]
+    """
+    all_comments = []
+    next_offset = 0
+    
+    while True:
+        result = fetch_dynamic_comments(dynamic_id, header, next_offset)
+        all_comments.extend(result['comments'])
+        
+        if not result['has_more'] or len(result['comments']) == 0:
+            break
+            
+        next_offset = result['next_offset']
+        time.sleep(0.5)  # 避免请求过快
+    
+    return all_comments

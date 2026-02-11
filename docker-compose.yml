@@ -5,7 +5,7 @@ services:
     build: .
     container_name: bilibili-comment
     ports:
-      - "5000:5000"
+      - "5002:5000"
     volumes:
       - ./bilibili_monitor.db:/app/bilibili_monitor.db
       - ./bili_cookie.txt:/app/bili_cookie.txt

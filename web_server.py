@@ -53,7 +53,8 @@ def get_videos():
     return jsonify([{
         'oid': v[0],
         'bv_id': v[1],
-        'title': v[2]
+        'title': v[2],
+        'owner_mid': v[3] if len(v) > 3 else None
     } for v in videos])
 
 @app.route('/api/videos', methods=['POST'])
@@ -71,11 +72,11 @@ def add_video():
         header = main_module.get_header()
         
         # 获取视频信息
-        oid, title = main_module.get_information(bv_id, header)
+        oid, title, owner_mid = main_module.get_information(bv_id, header)
         
         if oid and title:
             # 添加到数据库
-            success = db.add_video_to_db(oid, bv_id, title)
+            success = db.add_video_to_db(oid, bv_id, title, owner_mid)
             if success:
                 return jsonify({'success': True, 'message': f'成功添加视频: {title}'})
             else:
@@ -328,7 +329,7 @@ def update_setting(key):
 
 @app.route('/api/check-dynamic-videos', methods=['POST'])
 def check_dynamic_videos():
-    """检查用户动态视频并自动添加到监控列表"""
+    """检查用户动态视频并自动添加到监控列表（只保留最新一个）"""
     try:
         # 检查是否开启了自动添加功能
         auto_add = db.get_system_setting('auto_add_user_videos', '1') == '1'
@@ -341,43 +342,49 @@ def check_dynamic_videos():
             return jsonify({'success': True, 'message': '没有设置动态监控的用户', 'added': []})
         
         added_videos = []
-        existing_bvids = db.get_dynamic_video_bvids()
         
-        # 这里需要获取header，简化处理
-        # 实际使用时需要从cookie文件读取
+        # 创建一个简单的header
+        header = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://space.bilibili.com'
+        }
         
         for mid, uname in dynamic_users.items():
             try:
-                # 获取用户视频列表
-                import user_monitor
-                # 创建一个简单的header
-                header = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Referer': 'https://space.bilibili.com'
-                }
-                videos = user_monitor.get_user_dynamic_videos(mid, header, limit=5)
+                # 获取用户最新的一个视频
+                videos = user_monitor.get_user_dynamic_videos(mid, header, limit=1)
+                if not videos:
+                    continue
                 
-                for bvid, title in videos:
-                    if bvid not in existing_bvids:
-                        # 获取视频详细信息
-                        import main
-                        oid, video_title = main.get_information(bvid, header)
-                        if oid and video_title:
-                            # 添加到视频监控列表
-                            if db.add_video_to_db(oid, bvid, video_title):
-                                # 记录到动态视频表
-                                db.add_dynamic_video(bvid, mid, video_title)
-                                added_videos.append({
-                                    'bvid': bvid,
-                                    'title': video_title,
-                                    'user': uname
-                                })
+                new_bvid, new_title = videos[0]
+                existing_bvids = db.get_dynamic_video_bvids()
+                
+                if new_bvid not in existing_bvids:
+                    # 获取视频详细信息
+                    import main
+                    oid, video_title, owner_mid = main.get_information(new_bvid, header)
+                    if oid and video_title:
+                        # 获取该用户之前监控的视频并移除
+                        old_videos = db.get_user_dynamic_videos(mid)
+                        for old_bvid, old_title in old_videos:
+                            if old_bvid != new_bvid:
+                                db.remove_video_by_bvid(old_bvid)
+                        
+                        # 添加到视频监控列表
+                        if db.add_video_to_db(oid, new_bvid, video_title, owner_mid):
+                            # 记录到动态视频表
+                            db.add_dynamic_video(new_bvid, mid, video_title)
+                            added_videos.append({
+                                'bvid': new_bvid,
+                                'title': video_title,
+                                'user': uname
+                            })
             except Exception as e:
                 print(f"检查用户 {uname} 动态时出错: {e}")
         
         return jsonify({
             'success': True,
-            'message': f'成功添加 {len(added_videos)} 个视频',
+            'message': f'成功更新 {len(added_videos)} 个用户的最新视频',
             'added': added_videos
         })
     except Exception as e:

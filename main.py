@@ -66,10 +66,10 @@ def get_header():
                 added_count = 0
                 for bv_id in all_bvids:
                     # 使用现有函数获取视频详细信息
-                    oid, title = get_information(bv_id, temp_header_for_bv_fetch)
+                    oid, title, owner_mid = get_information(bv_id, temp_header_for_bv_fetch)
                     if oid and title:
                         # 使用现有函数添加到数据库，它会自动处理重复项
-                        if db.add_video_to_db(oid, bv_id, title):
+                        if db.add_video_to_db(oid, bv_id, title, owner_mid):
                             added_count += 1
                     time.sleep(0.5)  # 短暂延时，避免API请求过快
 
@@ -99,7 +99,7 @@ def get_header():
 
 
 def get_information(bv, header):
-    """通过API获取视频的 'oid' (即 'aid') 和视频标题。"""
+    """通过API获取视频的 'oid' (即 'aid')、视频标题和作者MID。"""
     print(f"正在获取视频 {bv} 的信息...")
     api_url = f"https://api.bilibili.com/x/web-interface/view?bvid={bv}"
     try:
@@ -110,13 +110,14 @@ def get_information(bv, header):
             video_data = data.get('data', {})
             oid = video_data.get('aid')
             title = video_data.get('title')
+            owner_mid = str(video_data.get('owner', {}).get('mid', ''))
             if oid and title:
-                print(f"  - [API] 成功获取: 【{title.strip()}】")
-                return str(oid), title.strip()
+                print(f"  - [API] 成功获取: 【{title.strip()}】 作者MID: {owner_mid}")
+                return str(oid), title.strip(), owner_mid
     except Exception as e:
         print(f"  - [警告] API请求失败: {e}。")
     print(f"  - [错误] 无法通过 API 获取视频 {bv} 的信息，请检查 BV 号是否正确或 Cookie 是否有效。")
-    return None, None
+    return None, None, None
 
 
 def md5(code):
@@ -400,9 +401,9 @@ def display_main_menu():
             bv_input = input("请输入要添加的新 BV 号 (多个请用逗号或空格隔开): ").strip()
             bvs = [bv.strip() for bv in re.split(r'[\s,]+', bv_input) if bv.strip()]
             for bv in bvs:
-                oid, title = get_information(bv, header)
+                oid, title, owner_mid = get_information(bv, header)
                 if oid and title:
-                    if db.add_video_to_db(oid, bv, title):
+                    if db.add_video_to_db(oid, bv, title, owner_mid):
                         print(f"成功将【{title}】添加到数据库。")
                 time.sleep(1)
 

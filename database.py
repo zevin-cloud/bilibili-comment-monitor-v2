@@ -14,9 +14,19 @@ def init_db():
             oid TEXT PRIMARY KEY,
             bv_id TEXT NOT NULL UNIQUE,
             title TEXT NOT NULL,
+            owner_mid TEXT,
             added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         ''')
+        
+        # 檢查並添加 owner_mid 列（數據庫遷移）
+        try:
+            cursor.execute('SELECT owner_mid FROM videos LIMIT 1')
+        except sqlite3.OperationalError:
+            # 列不存在，添加它
+            cursor.execute('ALTER TABLE videos ADD COLUMN owner_mid TEXT')
+            conn.commit()
+            print("[數據庫] 已添加 owner_mid 列到 videos 表")
         # 創建已見評論表格
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS seen_comments (
@@ -50,6 +60,29 @@ def init_db():
             FOREIGN KEY (mid) REFERENCES monitored_users (mid) ON DELETE CASCADE
         )
         ''')
+        
+        # 創建動態記錄表格（記錄用戶的圖文動態）
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS monitored_dynamics (
+            dynamic_id TEXT PRIMARY KEY,
+            mid TEXT NOT NULL,
+            content TEXT,
+            dynamic_type INTEGER DEFAULT 0,
+            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (mid) REFERENCES monitored_users (mid) ON DELETE CASCADE
+        )
+        ''')
+        
+        # 創建已見動態評論表格
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS seen_dynamic_comments (
+            rpid TEXT PRIMARY KEY,
+            dynamic_id TEXT NOT NULL,
+            seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (dynamic_id) REFERENCES monitored_dynamics (dynamic_id) ON DELETE CASCADE
+        )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_dynamic_id ON seen_dynamic_comments (dynamic_id)')
         
         # 創建監控時間段配置表格
         cursor.execute('''
@@ -98,15 +131,37 @@ def get_monitored_videos():
     """從數據庫獲取所有正在監控的影片列表。"""
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        cursor.execute('SELECT oid, bv_id, title FROM videos ORDER BY added_at DESC')
+        cursor.execute('SELECT oid, bv_id, title, owner_mid FROM videos ORDER BY added_at DESC')
         return cursor.fetchall()
 
-def add_video_to_db(oid, bv_id, title):
+def get_videos_by_owner_mid(owner_mid):
+    """獲取指定作者的所有視頻。"""
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT oid, bv_id, title FROM videos WHERE owner_mid = ?', (owner_mid,))
+        return cursor.fetchall()
+
+def remove_video_by_bvid(bv_id):
+    """通過BV號刪除視頻。"""
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        # 先刪除相關的評論記錄
+        cursor.execute('''
+            DELETE FROM seen_comments 
+            WHERE oid IN (SELECT oid FROM videos WHERE bv_id = ?)
+        ''', (bv_id,))
+        # 再刪除視頻
+        cursor.execute('DELETE FROM videos WHERE bv_id = ?', (bv_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def add_video_to_db(oid, bv_id, title, owner_mid=None):
     """將一個新影片添加到數據庫。"""
     try:
         with sqlite3.connect(DB_NAME) as conn:
             cursor = conn.cursor()
-            cursor.execute('INSERT INTO videos (oid, bv_id, title) VALUES (?, ?, ?)', (oid, bv_id, title))
+            cursor.execute('INSERT INTO videos (oid, bv_id, title, owner_mid) VALUES (?, ?, ?, ?)', 
+                         (oid, bv_id, title, owner_mid))
             conn.commit()
             return True
     except sqlite3.IntegrityError:
@@ -228,6 +283,93 @@ def get_user_dynamic_videos(mid):
         cursor = conn.cursor()
         cursor.execute('SELECT bv_id, title FROM dynamic_videos WHERE mid = ?', (mid,))
         return cursor.fetchall()
+
+
+# --- 動態（圖文）監控相關函數 ---
+
+def add_monitored_dynamic(dynamic_id, mid, content='', dynamic_type=0):
+    """添加一個動態到監控列表。"""
+    try:
+        with sqlite3.connect(DB_NAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR IGNORE INTO monitored_dynamics (dynamic_id, mid, content, dynamic_type) 
+                VALUES (?, ?, ?, ?)
+            ''', (dynamic_id, mid, content, dynamic_type))
+            conn.commit()
+            return cursor.rowcount > 0
+    except Exception as e:
+        print(f"添加監控動態時出錯: {e}")
+        return False
+
+def remove_monitored_dynamic(dynamic_id):
+    """從監控列表移除一個動態。"""
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        # 先刪除相關的評論記錄
+        cursor.execute('DELETE FROM seen_dynamic_comments WHERE dynamic_id = ?', (dynamic_id,))
+        # 再刪除動態
+        cursor.execute('DELETE FROM monitored_dynamics WHERE dynamic_id = ?', (dynamic_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def get_monitored_dynamics():
+    """獲取所有監控的動態列表。"""
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT d.dynamic_id, d.mid, d.content, d.dynamic_type, d.added_at, u.uname
+            FROM monitored_dynamics d
+            JOIN monitored_users u ON d.mid = u.mid
+            ORDER BY d.added_at DESC
+        ''')
+        return cursor.fetchall()
+
+def get_user_monitored_dynamics(mid):
+    """獲取指定用戶的所有監控動態。"""
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT dynamic_id, content, dynamic_type FROM monitored_dynamics WHERE mid = ?', (mid,))
+        return cursor.fetchall()
+
+def add_dynamic_comment_to_db(rpid, dynamic_id):
+    """將一個動態評論標記為已見。"""
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute('INSERT OR IGNORE INTO seen_dynamic_comments (rpid, dynamic_id) VALUES (?, ?)', 
+                     (rpid, dynamic_id))
+        conn.commit()
+
+def load_seen_dynamic_comments(dynamic_id):
+    """加載指定動態的所有已見評論ID。"""
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT rpid FROM seen_dynamic_comments WHERE dynamic_id = ?', (dynamic_id,))
+        return {row[0] for row in cursor.fetchall()}
+
+def remove_user_dynamics_except_latest(mid, keep_dynamic_id):
+    """移除用戶除最新動態外的所有動態。"""
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        # 獲取要刪除的動態ID
+        cursor.execute('''
+            SELECT dynamic_id FROM monitored_dynamics 
+            WHERE mid = ? AND dynamic_id != ?
+        ''', (mid, keep_dynamic_id))
+        to_remove = [row[0] for row in cursor.fetchall()]
+        
+        # 刪除這些動態的評論記錄
+        for dynamic_id in to_remove:
+            cursor.execute('DELETE FROM seen_dynamic_comments WHERE dynamic_id = ?', (dynamic_id,))
+        
+        # 刪除動態
+        cursor.execute('''
+            DELETE FROM monitored_dynamics 
+            WHERE mid = ? AND dynamic_id != ?
+        ''', (mid, keep_dynamic_id))
+        
+        conn.commit()
+        return len(to_remove)
 
 
 # --- 監控時間段配置相關函數 ---
