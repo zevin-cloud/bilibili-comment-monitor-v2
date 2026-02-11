@@ -125,6 +125,55 @@ def init_db():
         VALUES ('auto_add_user_videos', '1')
         ''')
         
+        # 創建統一活動表（新架構）
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS activities (
+            id TEXT PRIMARY KEY,
+            activity_type TEXT NOT NULL,
+            owner_mid TEXT NOT NULL,
+            owner_name TEXT,
+            content TEXT,
+            title TEXT,
+            extra_data TEXT,
+            status TEXT DEFAULT 'active',
+            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (owner_mid) REFERENCES monitored_users(mid)
+        )
+        ''')
+        
+        # 創建統一評論表（新架構）
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS activity_comments (
+            rpid TEXT PRIMARY KEY,
+            activity_id TEXT NOT NULL,
+            activity_type TEXT NOT NULL,
+            commenter_mid TEXT,
+            commenter_name TEXT,
+            content TEXT,
+            is_owner INTEGER DEFAULT 0,
+            seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
+        )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_activity_id ON activity_comments (activity_id)')
+        
+        # 檢查並添加 last_activity_id 列到 monitored_users 表
+        try:
+            cursor.execute('SELECT last_activity_id FROM monitored_users LIMIT 1')
+        except sqlite3.OperationalError:
+            cursor.execute('ALTER TABLE monitored_users ADD COLUMN last_activity_id TEXT')
+            conn.commit()
+            print("[數據庫] 已添加 last_activity_id 列到 monitored_users 表")
+        
+        # 檢查並添加 last_check_time 列到 monitored_users 表
+        try:
+            cursor.execute('SELECT last_check_time FROM monitored_users LIMIT 1')
+        except sqlite3.OperationalError:
+            cursor.execute('ALTER TABLE monitored_users ADD COLUMN last_check_time TIMESTAMP')
+            conn.commit()
+            print("[數據庫] 已添加 last_check_time 列到 monitored_users 表")
+        
         conn.commit()
 
 def get_monitored_videos():

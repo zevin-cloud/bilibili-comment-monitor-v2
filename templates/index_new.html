@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B站评论监控器 - 新架构版</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>📺 监控器</h1>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-item active" data-section="dashboard" onclick="app.switchSection('dashboard')">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-text">仪表盘</span>
+                </div>
+                <div class="nav-item" data-section="users" onclick="app.switchSection('users')">
+                    <span class="nav-icon">👥</span>
+                    <span class="nav-text">用户管理</span>
+                </div>
+                <div class="nav-item" data-section="videos" onclick="app.switchSection('videos')">
+                    <span class="nav-icon">📹</span>
+                    <span class="nav-text">视频管理</span>
+                </div>
+                <div class="nav-item" data-section="activities" onclick="app.switchSection('activities')">
+                    <span class="nav-icon">📝</span>
+                    <span class="nav-text">活动监控</span>
+                </div>
+                <div class="nav-item" data-section="schedules" onclick="app.switchSection('schedules')">
+                    <span class="nav-icon">⏰</span>
+                    <span class="nav-text">时间段配置</span>
+                </div>
+                <div class="nav-item" data-section="logs" onclick="app.switchSection('logs')">
+                    <span class="nav-icon">📋</span>
+                    <span class="nav-text">日志查看</span>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 顶部状态栏 -->
+            <header class="status-header">
+                <div class="status-group">
+                    <span class="status-label">📡 监控状态</span>
+                    <span class="status-value" id="statusValue">未运行</span>
+                    <div class="status-indicator" id="statusDot"></div>
+                </div>
+                <div class="status-group">
+                    <span class="status-label">🍪 Cookie</span>
+                    <span class="status-value" id="cookieValue">检查中...</span>
+                </div>
+                <div class="status-group">
+                    <span class="status-label">⏰ 监控频率</span>
+                    <span class="status-value" id="intervalValue">加载中...</span>
+                </div>
+                <div class="status-actions">
+                    <button class="btn btn-sm btn-primary" onclick="authManager.showLoginModal()">📱 扫码登录</button>
+                    <button class="btn btn-sm btn-success" id="startBtn" onclick="monitorController.startMonitor()">▶ 开始</button>
+                    <button class="btn btn-sm btn-danger" id="stopBtn" onclick="monitorController.stopMonitor()" style="display:none;">⏹ 停止</button>
+                </div>
+            </header>
+
+            <!-- 内容区域 -->
+            <div class="content-area">
+                <!-- 仪表盘 -->
+                <section id="section-dashboard" class="content-section active">
+                    <div class="section-header">
+                        <h2 class="section-title"><span class="icon">📊</span> 仪表盘</h2>
+                    </div>
+                    <div class="form-row">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">监控用户</h3>
+                            </div>
+                            <div style="text-align: center; padding: 20px;">
+                                <div style="font-size: 48px; font-weight: 700; color: var(--primary-color);" id="statUserCount">0</div>
+                                <div style="color: var(--text-muted); margin-top: 8px;">个监控用户</div>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">监控视频</h3>
+                            </div>
+                            <div style="text-align: center; padding: 20px;">
+                                <div style="font-size: 48px; font-weight: 700; color: var(--primary-color);" id="statVideoCount">0</div>
+                                <div style="color: var(--text-muted); margin-top: 8px;">个监控视频</div>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">监控活动</h3>
+                            </div>
+                            <div style="text-align: center; padding: 20px;">
+                                <div style="font-size: 48px; font-weight: 700; color: var(--primary-color);" id="statActivityCount">0</div>
+                                <div style="color: var(--text-muted); margin-top: 8px;">个监控活动</div>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">时间段配置</h3>
+                            </div>
+                            <div style="text-align: center; padding: 20px;">
+                                <div style="font-size: 48px; font-weight: 700; color: var(--primary-color);" id="statScheduleCount">0</div>
+                                <div style="color: var(--text-muted); margin-top: 8px;">个时间段</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 用户管理 -->
+                <section id="section-users" class="content-section">
+                    <div class="section-header">
+                        <h2 class="section-title"><span class="icon">👥</span> 用户管理</h2>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">添加监控用户</h3>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>搜索用户</label>
+                                <input type="text" id="searchKeyword" placeholder="输入用户名搜索">
+                            </div>
+                            <div class="form-group">
+                                <label>&nbsp;</label>
+                                <button class="btn" id="searchBtn" onclick="userManager.searchUser(document.getElementById('searchKeyword').value)">🔍 搜索</button>
+                            </div>
+                        </div>
+                        <div class="form-group" id="searchResults" style="display: none;">
+                            <label>搜索结果</label>
+                            <select id="searchResultSelect" onchange="userManager.selectSearchResult()">
+                                <option value="">-- 选择用户 --</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>用户UID</label>
+                                <input type="text" id="userMid" placeholder="例如: 208259">
+                            </div>
+                            <div class="form-group">
+                                <label>用户名(可选)</label>
+                                <input type="text" id="userName" placeholder="例如: 哔哩哔哩番剧">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>监控选项</label>
+                            <div class="checkbox-group">
+                                <label class="checkbox-label"><input type="checkbox" id="monitorComments" checked> 监控评论</label>
+                                <label class="checkbox-label"><input type="checkbox" id="monitorDynamic" checked> 监控动态</label>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" id="addUserBtn" onclick="userManager.addUser()">➕ 添加用户</button>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">已监控用户列表</h3>
+                        </div>
+                        <div class="list" id="userList">
+                            <div class="empty-state"><span class="empty-icon">👥</span>暂无用户</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 视频管理 -->
+                <section id="section-videos" class="content-section">
+                    <div class="section-header">
+                        <h2 class="section-title"><span class="icon">📹</span> 视频管理</h2>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">添加视频</h3>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>BV号</label>
+                                <input type="text" id="videoBvId" placeholder="例如: BV1xx411c7mD">
+                            </div>
+                            <div class="form-group">
+                                <label>&nbsp;</label>
+                                <button class="btn" onclick="videoManager.addVideo()">➕ 添加视频</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">已监控视频列表</h3>
+                        </div>
+                        <div class="list" id="videoList">
+                            <div class="empty-state"><span class="empty-icon">📹</span>暂无视频</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 活动监控 -->
+                <section id="section-activities" class="content-section">
+                    <div class="section-header">
+                        <h2 class="section-title"><span class="icon">📝</span> 活动监控</h2>
+                        <button class="btn btn-sm" onclick="activityManager.refreshDynamics()">🔄 刷新动态</button>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">说明</h3>
+                        </div>
+                        <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;">
+                            添加用户并启用动态监控后，系统会自动获取该用户的最新活动（包括视频、图文、专栏等）。
+                            活动会自动添加到监控列表中。
+                        </p>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">监控活动列表</h3>
+                        </div>
+                        <div class="list" id="activityList">
+                            <div class="empty-state"><span class="empty-icon">📝</span>暂无活动<br><small>添加用户并启用动态监控后会自动获取</small></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 时间段配置 -->
+                <section id="section-schedules" class="content-section">
+                    <div class="section-header">
+                        <h2 class="section-title"><span class="icon">⏰</span> 时间段配置</h2>
+                        <button class="btn btn-sm" onclick="app.refreshCurrentInterval()">🔄 刷新</button>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">添加时间段</h3>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>名称</label>
+                                <input type="text" id="scheduleName" placeholder="例如: 工作日高峰">
+                            </div>
+                            <div class="form-group">
+                                <label>间隔(秒)</label>
+                                <input type="number" id="scheduleInterval" value="30" min="10">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>开始时间</label>
+                                <input type="time" id="scheduleStart" value="08:00">
+                            </div>
+                            <div class="form-group">
+                                <label>结束时间</label>
+                                <input type="time" id="scheduleEnd" value="15:00">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>星期(多选)</label>
+                            <select id="scheduleDays" multiple style="height: 38px;">
+                                <option value="1" selected>周一</option>
+                                <option value="2" selected>周二</option>
+                                <option value="3" selected>周三</option>
+                                <option value="4" selected>周四</option>
+                                <option value="5" selected>周五</option>
+                                <option value="6">周六</option>
+                                <option value="0">周日</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" onclick="app.addSchedule()">➕ 添加时间段</button>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">已配置时间段</h3>
+                        </div>
+                        <div class="list" id="scheduleList">
+                            <div class="empty-state"><span class="empty-icon">⏰</span>暂无配置</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 日志查看 -->
+                <section id="section-logs" class="content-section">
+                    <div class="section-header">
+                        <h2 class="section-title"><span class="icon">📋</span> 日志查看</h2>
+                        <button class="btn btn-sm" onclick="logManager.refreshLogs()">🔄 刷新</button>
+                    </div>
+                    <div class="logs-panel">
+                        <div class="logs-header">
+                            <span class="logs-title">监控日志</span>
+                            <span style="font-size: 12px; color: #999;">自动每10秒刷新</span>
+                        </div>
+                        <div id="logsContainer">
+                            <div class="empty-state"><span class="empty-icon">📋</span>暂无日志</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- 消息提示 -->
+    <div id="message" class="message"></div>
+
+    <!-- 登录模态框 -->
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <h3 class="modal-title">📱 扫码登录</h3>
+            <div id="qrcodeContainer" style="margin: 20px 0;">
+                <p>加载中...</p>
+            </div>
+            <div id="loginStatus" style="color: #666;"></div>
+            <button class="btn btn-sm" onclick="authManager.closeLoginModal()" style="margin-top: 10px;">取消</button>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/ui.js"></script>
+    <script src="/static/js/state.js"></script>
+    <script src="/static/js/auth-manager.js"></script>
+    <script src="/static/js/video-manager.js"></script>
+    <script src="/static/js/user-manager.js"></script>
+    <script src="/static/js/activity-manager.js"></script>
+    <script src="/static/js/monitor-controller.js"></script>
+    <script src="/static/js/log-manager.js"></script>
+    <script src="/static/js/app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            await app.init();
+        });
+    </script>
+</body>
+</html>

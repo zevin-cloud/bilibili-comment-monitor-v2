@@ -3,11 +3,9 @@
 import sys
 import time
 import datetime
-import subprocess
 from main import get_header, get_information, fetch_latest_comments, process_and_notify_comment, fetch_all_sub_replies
 import database as db
 import notifier
-import bvget
 import user_monitor
 
 # 导入平台相关模块
