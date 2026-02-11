@@ -231,6 +231,50 @@ def search_user_by_keyword(keyword, header):
     return users
 
 
+def md5(code):
+    """对输入字符串执行 MD5 哈希。"""
+    MD5 = hashlib.md5()
+    MD5.update(code.encode('utf-8'))
+    return MD5.hexdigest()
+
+def get_wbi_keys(header):
+    """动态获取 WBI 签名所需的 img_key 和 sub_key"""
+    try:
+        resp = requests.get("https://api.bilibili.com/x/web-interface/nav", headers=header, timeout=5)
+        resp.raise_for_status()
+        json_content = resp.json()
+        img_url = json_content['data']['wbi_img']['img_url']
+        sub_url = json_content['data']['wbi_img']['sub_url']
+        img_key = img_url.rsplit('/', 1)[1].split('.')[0]
+        sub_key = sub_url.rsplit('/', 1)[1].split('.')[0]
+        return img_key, sub_key
+    except Exception as e:
+        print(f"动态获取 WBI keys 失败: {e}，将使用备用盐值")
+        return None, None
+
+def enc_wbi(params, img_key, sub_key):
+    """为请求参数添加 WBI 签名"""
+    mixin_key_enc_tab = [
+        46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49,
+        33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40,
+        61, 26, 17, 0, 1, 60, 51, 30, 4, 22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11,
+        36, 20, 34, 44, 52
+    ]
+    raw_key = img_key + sub_key
+    mixin_key = "".join([raw_key[i] for i in mixin_key_enc_tab])[:32]
+    curr_time = int(time.time())
+    params['wts'] = curr_time
+    params = dict(sorted(params.items()))
+    # 过滤特殊字符
+    params = {
+        k: "".join([char for char in str(v) if char not in "!'()*"])
+        for k, v in params.items()
+    }
+    query = urllib.parse.urlencode(params)
+    w_rid = hashlib.md5((query + mixin_key).encode()).hexdigest()
+    params['w_rid'] = w_rid
+    return params
+
 def fetch_dynamic_comments(dynamic_id, header, next_offset=0):
     """
     获取动态的评论列表。
@@ -257,47 +301,143 @@ def fetch_dynamic_comments(dynamic_id, header, next_offset=0):
     has_more = False
     new_next_offset = 0
     
-    url = "https://api.bilibili.com/x/v2/reply/main"
+    # 只使用最基本的请求头，减少触发反爬虫的风险
+    simple_header = {
+        'User-Agent': header.get('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'),
+        'Cookie': header.get('Cookie', ''),
+        'Referer': f'https://t.bilibili.com/{dynamic_id}'
+    }
+    
+    # 尝试使用评论主API（使用wbi）
+    url = "https://api.bilibili.com/x/v2/reply/wbi/main"
     params = {
         'oid': dynamic_id,
         'type': 17,  # 动态评论类型
-        'next': next_offset,
-        'ps': 20
+        'mode': 2,
+        'pn': 1,
+        'ps': 20,
+        'sort': 2,
+        'web_location': 1315875
     }
     
     try:
-        header_copy = header.copy()
-        header_copy['Referer'] = f'https://t.bilibili.com/{dynamic_id}'
+        print(f"尝试API {url}，参数: {params}")
         
-        resp = requests.get(url, headers=header_copy, params=params, timeout=10)
+        # 添加WBI签名
+        img_key, sub_key = get_wbi_keys(simple_header)
+        if img_key and sub_key:
+            params = enc_wbi(params, img_key, sub_key)
+            print(f"添加WBI签名后的参数: {params}")
+        
+        # 添加随机延迟，模拟真实用户行为
+        time.sleep(1)
+        
+        resp = requests.get(url, headers=simple_header, params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
         
+        print(f"API响应: {data}")
+        
         if data.get('code') == 0:
             reply_data = data.get('data', {})
-            replies = reply_data.get('replies', [])
+            # 检查不同的数据结构
+            if 'replies' in reply_data:
+                replies = reply_data['replies']
+            elif 'list' in reply_data and 'replies' in reply_data['list']:
+                replies = reply_data['list']['replies']
+            else:
+                replies = []
             
             for reply in replies:
-                member = reply.get('member', {})
-                content = reply.get('content', {})
-                
-                comments.append({
-                    'rpid': str(reply.get('rpid', '')),
-                    'mid': str(member.get('mid', '')),
-                    'uname': member.get('uname', ''),
-                    'message': content.get('message', ''),
-                    'ctime': reply.get('ctime', 0)
-                })
+                # 检查不同的评论数据结构
+                if 'member' in reply and 'content' in reply:
+                    member = reply['member']
+                    content = reply['content']
+                    comments.append({
+                        'rpid': str(reply.get('rpid', '')),
+                        'mid': str(member.get('mid', '')),
+                        'uname': member.get('uname', ''),
+                        'message': content.get('message', ''),
+                        'ctime': reply.get('ctime', 0)
+                    })
             
             # 检查是否还有更多评论
-            cursor = reply_data.get('cursor', {})
-            has_more = cursor.get('is_end', True) == False
-            new_next_offset = cursor.get('next_offset', 0)
+            if 'cursor' in reply_data:
+                cursor = reply_data['cursor']
+                has_more = cursor.get('is_end', True) == False
+                new_next_offset = cursor.get('next_offset', 0)
+            elif 'page' in reply_data:
+                page = reply_data['page']
+                has_more = page.get('pn', 1) < page.get('count', 1)
+                new_next_offset = page.get('pn', 1) + 1
+            
+            print(f"成功获取到 {len(comments)} 条评论")
         else:
-            print(f"获取动态 {dynamic_id} 评论失败: {data.get('message', '未知错误')}")
+            print(f"API {url} 获取动态 {dynamic_id} 评论失败: {data.get('message', '未知错误')}")
             
     except Exception as e:
-        print(f"请求动态 {dynamic_id} 评论时出错: {e}")
+        print(f"API {url} 请求动态 {dynamic_id} 评论时出错: {e}")
+    
+    # 如果第一个API失败，尝试使用动态评论专用API
+    if not comments:
+        url = "https://api.vc.bilibili.com/dynamic_svr/v1/dynamic_svr/get_dynamic_reply"
+        params = {
+            'dynamic_id': dynamic_id,
+            'offset': next_offset,
+            'size': 20
+        }
+        
+        try:
+            print(f"尝试API {url}，参数: {params}")
+            
+            # 添加随机延迟，模拟真实用户行为
+            time.sleep(1)
+            
+            resp = requests.get(url, headers=simple_header, params=params, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            print(f"API响应: {data}")
+            
+            if data.get('code') == 0:
+                reply_data = data.get('data', {})
+                # 检查不同的数据结构
+                if 'replies' in reply_data:
+                    replies = reply_data['replies']
+                elif 'list' in reply_data and 'replies' in reply_data['list']:
+                    replies = reply_data['list']['replies']
+                else:
+                    replies = []
+                
+                for reply in replies:
+                    # 检查不同的评论数据结构
+                    if 'member' in reply and 'content' in reply:
+                        member = reply['member']
+                        content = reply['content']
+                        comments.append({
+                            'rpid': str(reply.get('rpid', '')),
+                            'mid': str(member.get('mid', '')),
+                            'uname': member.get('uname', ''),
+                            'message': content.get('message', ''),
+                            'ctime': reply.get('ctime', 0)
+                        })
+                
+                # 检查是否还有更多评论
+                if 'cursor' in reply_data:
+                    cursor = reply_data['cursor']
+                    has_more = cursor.get('is_end', True) == False
+                    new_next_offset = cursor.get('next_offset', 0)
+                
+                print(f"成功获取到 {len(comments)} 条评论")
+            else:
+                print(f"API {url} 获取动态 {dynamic_id} 评论失败: {data.get('message', '未知错误')}")
+                
+        except Exception as e:
+            print(f"API {url} 请求动态 {dynamic_id} 评论时出错: {e}")
+    
+    # 如果无法获取评论，返回一个友好的错误信息
+    if not comments:
+        print(f"警告: 无法获取动态 {dynamic_id} 的评论，可能是因为API更改或反爬虫限制")
     
     return {
         'comments': comments,

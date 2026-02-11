@@ -149,43 +149,45 @@ def update_user_latest_video(mid, uname, header):
 
 def update_user_latest_dynamic(mid, uname, header):
     """
-    获取用户最新的一个图文动态，并更新到监控列表
+    获取用户最新的动态，并更新到监控列表
     只保留该用户最新的一个动态，移除该用户之前的老动态
     
     Returns:
-        (新动态ID, 动态内容) 或 (None, None)
+        (新动态ID, 新动态内容) 或 (None, None)
     """
     try:
-        # 获取用户最新的动态（包括图文、文字等）
+        # 获取用户最新的动态（包括图文、文字、视频等）
+        log(f"[动态] 正在获取用户 {uname}({mid}) 的最新动态...")
         dynamics = user_monitor.get_user_dynamics(mid, header, limit=5)
-        
-        # 过滤出图文动态(类型2)和文字动态(类型4)
-        valid_dynamics = [d for d in dynamics if d['type'] in [2, 4]]
-        
-        if not valid_dynamics:
+        if not dynamics:
+            log(f"[动态] 用户 {uname} 没有动态")
             return None, None
         
-        latest_dynamic = valid_dynamics[0]
+        # 取最新的一个动态
+        latest_dynamic = dynamics[0]
         new_dynamic_id = latest_dynamic['dynamic_id']
         new_content = latest_dynamic['content'][:50] if latest_dynamic['content'] else '[无内容]'
-        dynamic_type = latest_dynamic['type']
+        new_dynamic_type = latest_dynamic['type']
         
         # 检查这个动态是否已经在监控列表中
-        user_dynamics = db.get_user_monitored_dynamics(mid)
-        existing_dynamic_ids = {d[0] for d in user_dynamics}
-        
+        existing_dynamic_ids = {d[0] for d in db.get_user_monitored_dynamics(mid)}
         if new_dynamic_id in existing_dynamic_ids:
             # 动态已经在监控列表中，不需要更新
+            log(f"[动态] 用户 {uname} 的最新动态已经在监控列表中")
             return None, None
         
+        # 获取该用户之前监控的动态
+        old_dynamics = db.get_user_monitored_dynamics(mid)
+        
         # 移除该用户之前的老动态
-        removed_count = db.remove_user_dynamics_except_latest(mid, new_dynamic_id)
-        if removed_count > 0:
-            log(f"[移除] 用户 [{uname}] 的 {removed_count} 个老动态")
+        for old_dynamic_id, _, _, _, _, _ in old_dynamics:
+            if old_dynamic_id != new_dynamic_id:
+                db.remove_monitored_dynamic(old_dynamic_id)
+                log(f"[移除] 用户 [{uname}] 的老动态: {old_dynamic_id}")
         
         # 添加新动态到监控列表
-        if db.add_monitored_dynamic(new_dynamic_id, mid, latest_dynamic['content'], dynamic_type):
-            log(f"[添加] 用户 [{uname}] 的最新动态: {new_content}...")
+        if db.add_monitored_dynamic(new_dynamic_id, mid, latest_dynamic['content'], new_dynamic_type):
+            log(f"[添加] 用户 [{uname}] 的最新动态: {new_content}... (类型: {new_dynamic_type})")
             return new_dynamic_id, new_content
         
         return None, None
@@ -291,8 +293,8 @@ def auto_monitor():
         else:
             log("[完成] 所有用户的最新视频已在监控列表中")
         
-        # 自动添加/更新用户最新图文动态（只保留最新一个）
-        log("[动态] 检查并更新用户最新图文动态...")
+        # 自动添加/更新用户动态（保留所有动态）
+        log("[动态] 检查并更新用户动态...")
         dynamic_added_count = 0
         
         for mid, uname in dynamic_users.items():
@@ -302,20 +304,20 @@ def auto_monitor():
                 time.sleep(0.5)
         
         if dynamic_added_count > 0:
-            log(f"[完成] 更新了 {dynamic_added_count} 个用户的最新动态")
+            log(f"[完成] 添加了 {dynamic_added_count} 个用户的新动态")
         else:
-            log("[完成] 所有用户的最新动态已在监控列表中")
+            log("[完成] 所有用户的动态已在监控列表中")
     
     # 重新获取视频列表
     videos = db.get_monitored_videos()
-    if not videos:
-        log("没有视频可监控，请先添加视频或用户")
-        sys.exit(1)
     
-    log(f"开始监控 {len(videos)} 个视频")
-    for v in videos:
-        owner_info = f" (作者MID: {v[3]})" if v[3] else ""
-        log(f"   - {v[2]} ({v[1]}){owner_info}")
+    if videos:
+        log(f"开始监控 {len(videos)} 个视频")
+        for v in videos:
+            owner_info = f" (作者MID: {v[3]})" if v[3] else ""
+            log(f"   - {v[2]} ({v[1]}){owner_info}")
+    else:
+        log("没有视频可监控，仅监控动态")
     
     # 获取监控间隔
     interval, schedule_name = db.get_current_interval()
@@ -329,15 +331,16 @@ def auto_monitor():
     # 初始化视频监控数据
     video_targets = {}
     total_seen = 0
-    for oid, bv_id, title, owner_mid in videos:
-        video_targets[oid] = {
-            "title": title,
-            "bv_id": bv_id,
-            "owner_mid": owner_mid,
-            "seen_ids": db.load_seen_comments_for_video(oid)
-        }
-        seen_count = len(video_targets[oid]['seen_ids'])
-        total_seen += seen_count
+    if videos:
+        for oid, bv_id, title, owner_mid in videos:
+            video_targets[oid] = {
+                "title": title,
+                "bv_id": bv_id,
+                "owner_mid": owner_mid,
+                "seen_ids": db.load_seen_comments_for_video(oid)
+            }
+            seen_count = len(video_targets[oid]['seen_ids'])
+            total_seen += seen_count
     
     log(f"准备就绪！共 {total_seen} 条历史评论")
     log("=" * 50)
@@ -370,7 +373,7 @@ def auto_monitor():
                     if new_bvid:
                         time.sleep(0.5)
                 
-                log("[动态] 检查用户是否有新图文动态...")
+                log("[动态] 检查用户是否有新动态...")
                 for mid, uname in dynamic_users.items():
                     new_dynamic_id, new_content = update_user_latest_dynamic(mid, uname, header)
                     if new_dynamic_id:
@@ -409,11 +412,12 @@ def auto_monitor():
                         "uname": uname,
                         "seen_ids": db.load_seen_dynamic_comments(dynamic_id)
                     }
-                    log(f"新动态加入监控: {uname} - {content[:30]}...")
+                    log(f"[动态] 新动态加入监控: {uname} - {content[:30]}...")
             
             # 清理已删除的动态
             dynamic_ids_to_remove = [did for did in dynamic_targets if did not in current_dynamic_ids]
             for did in dynamic_ids_to_remove:
+                log(f"[动态] 移除监控的动态: {dynamic_targets[did]['uname']} - {dynamic_targets[did]['content'][:30]}...")
                 del dynamic_targets[did]
             
             # 检查视频评论

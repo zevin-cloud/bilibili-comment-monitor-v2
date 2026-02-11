@@ -18,6 +18,7 @@ app = Flask(__name__)
 monitor_process = None
 monitor_thread = None
 log_file = 'bilibili_monitor.log'
+pid_file = 'monitor.pid'
 
 def write_log(message):
     """写入日志到文件"""
@@ -129,16 +130,16 @@ def search_user():
 
 @app.route('/api/users', methods=['POST'])
 def add_user():
-    """添加监控用户"""
+    """添加监控用户，并自动获取最新视频和动态"""
     data = request.json
     mid = data.get('mid')
     uname = data.get('uname', '')
     monitor_comments = data.get('monitor_comments', True)
     monitor_dynamic = data.get('monitor_dynamic', True)
-    
+
     if not mid:
         return jsonify({'success': False, 'error': '用户ID不能为空'})
-    
+
     # 如果没有提供用户名，尝试获取
     if not uname:
         try:
@@ -149,11 +150,54 @@ def add_user():
             uname, _ = user_monitor.get_user_info(mid, header)
         except:
             uname = ''
-    
-    success = db.add_monitored_user(mid, uname, 
+
+    # 添加用户到数据库
+    success = db.add_monitored_user(mid, uname,
                                    1 if monitor_comments else 0,
                                    1 if monitor_dynamic else 0)
-    return jsonify({'success': success, 'uname': uname})
+
+    added_items = []
+
+    # 如果启用了动态监控，自动获取最新视频和动态
+    if success and monitor_dynamic:
+        try:
+            header = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Referer': 'https://space.bilibili.com'
+            }
+
+            # 获取最新视频
+            videos = user_monitor.get_user_dynamic_videos(mid, header, limit=1)
+            if videos:
+                bvid, title = videos[0]
+                # 获取视频详细信息
+                import main as main_module
+                main_header = main_module.get_header()
+                oid, video_title, owner_mid = main_module.get_information(bvid, main_header)
+                if oid and video_title:
+                    if db.add_video_to_db(oid, bvid, video_title, owner_mid):
+                        db.add_dynamic_video(bvid, mid, video_title)
+                        added_items.append(f'视频: {video_title}')
+
+            # 获取最新动态
+            dynamics = user_monitor.get_user_dynamics(mid, header, limit=5)
+            valid_dynamics = [d for d in dynamics if d['type'] in [2, 4, 64]]
+            if valid_dynamics:
+                latest = valid_dynamics[0]
+                if db.add_monitored_dynamic(latest['dynamic_id'], mid, latest['content'], latest['type']):
+                    content_preview = latest['content'][:30] if latest['content'] else '无内容'
+                    added_items.append(f'动态: {content_preview}...')
+
+        except Exception as e:
+            print(f"自动获取视频/动态时出错: {e}")
+
+    message = '添加成功'
+    if uname:
+        message += f': {uname}'
+    if added_items:
+        message += f' (自动添加: {", ".join(added_items)})'
+
+    return jsonify({'success': success, 'uname': uname, 'message': message})
 
 @app.route('/api/users/<mid>', methods=['DELETE'])
 def delete_user(mid):
@@ -161,14 +205,61 @@ def delete_user(mid):
     success = db.remove_monitored_user(mid)
     return jsonify({'success': success})
 
+
+# --- 动态管理API ---
+
+@app.route('/api/dynamics', methods=['GET'])
+def get_dynamics():
+    """获取所有监控的动态"""
+    dynamics = db.get_monitored_dynamics()
+    return jsonify([{
+        'dynamic_id': d[0],
+        'mid': d[1],
+        'content': d[2],
+        'dynamic_type': d[3],
+        'added_at': d[4],
+        'uname': d[5]
+    } for d in dynamics])
+
+@app.route('/api/dynamics/<dynamic_id>', methods=['DELETE'])
+def delete_dynamic(dynamic_id):
+    """删除动态监控"""
+    success = db.remove_monitored_dynamic(dynamic_id)
+    return jsonify({'success': success})
+
+
+def is_process_running(pid):
+    """检查进程是否运行"""
+    try:
+        # Windows系统使用tasklist命令
+        subprocess.check_output(['tasklist', '/FI', f'PID eq {pid}'], stderr=subprocess.STDOUT)
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
 @app.route('/api/monitor/status', methods=['GET'])
 def get_monitor_status():
     """获取监控状态"""
     global monitor_process
+    
+    # 首先检查内存中的进程状态
     is_running = monitor_process is not None and monitor_process.poll() is None
+    pid = monitor_process.pid if is_running else None
+    
+    # 如果内存中没有进程，检查PID文件
+    if not is_running and os.path.exists(pid_file):
+        try:
+            with open(pid_file, 'r') as f:
+                saved_pid = int(f.read().strip())
+            if is_process_running(saved_pid):
+                is_running = True
+                pid = saved_pid
+        except Exception as e:
+            print(f"读取PID文件错误: {e}")
+    
     return jsonify({
         'running': is_running,
-        'pid': monitor_process.pid if is_running else None
+        'pid': pid
     })
 
 def monitor_output_reader():
@@ -194,8 +285,19 @@ def start_monitor():
     """开始监控"""
     global monitor_process, monitor_thread
     
+    # 检查是否已经有进程在运行
     if monitor_process and monitor_process.poll() is None:
         return jsonify({'success': False, 'error': '监控已在运行'})
+    
+    # 检查PID文件中是否有运行的进程
+    if os.path.exists(pid_file):
+        try:
+            with open(pid_file, 'r') as f:
+                saved_pid = int(f.read().strip())
+            if is_process_running(saved_pid):
+                return jsonify({'success': False, 'error': '监控已在运行'})
+        except Exception as e:
+            print(f"检查PID文件错误: {e}")
     
     try:
         # 清空旧日志
@@ -210,6 +312,10 @@ def start_monitor():
             text=True,
             bufsize=1
         )
+        
+        # 保存PID到文件
+        with open(pid_file, 'w') as f:
+            f.write(str(monitor_process.pid))
         
         # 启动日志读取线程
         monitor_thread = threading.Thread(target=monitor_output_reader, daemon=True)
@@ -226,13 +332,35 @@ def stop_monitor():
     """停止监控"""
     global monitor_process
     
+    # 检查是否有进程在运行
     if monitor_process:
         try:
             monitor_process.terminate()
             monitor_process.wait(timeout=5)
             monitor_process = None
+            # 删除PID文件
+            if os.path.exists(pid_file):
+                os.remove(pid_file)
             return jsonify({'success': True})
         except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+    
+    # 检查PID文件中是否有进程需要停止
+    if os.path.exists(pid_file):
+        try:
+            with open(pid_file, 'r') as f:
+                saved_pid = int(f.read().strip())
+            if is_process_running(saved_pid):
+                # 在Windows系统中，使用taskkill命令终止进程
+                subprocess.run(['taskkill', '/PID', str(saved_pid), '/F'], check=True)
+            # 删除PID文件
+            os.remove(pid_file)
+            return jsonify({'success': True})
+        except Exception as e:
+            print(f"停止PID文件中的进程错误: {e}")
+            # 即使出错，也删除PID文件
+            if os.path.exists(pid_file):
+                os.remove(pid_file)
             return jsonify({'success': False, 'error': str(e)})
     
     return jsonify({'success': False, 'error': '监控未在运行'})
