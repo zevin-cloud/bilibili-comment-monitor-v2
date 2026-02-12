@@ -174,6 +174,14 @@ def init_db():
             conn.commit()
             print("[數據庫] 已添加 last_check_time 列到 monitored_users 表")
         
+        # 檢查並添加 timestamp 列到 activities 表
+        try:
+            cursor.execute('SELECT timestamp FROM activities LIMIT 1')
+        except sqlite3.OperationalError:
+            cursor.execute('ALTER TABLE activities ADD COLUMN timestamp INTEGER DEFAULT 0')
+            conn.commit()
+            print("[數據庫] 已添加 timestamp 列到 activities 表")
+        
         conn.commit()
 
 def get_monitored_videos():

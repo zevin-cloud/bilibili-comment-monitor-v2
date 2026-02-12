@@ -80,7 +80,10 @@ class BilibiliAPI:
                     video_title = ''
                     
                     try:
-                        card_content = json.loads(card.get('card', '{}'))
+                        card_json = card.get('card')
+                        if not card_json:
+                            continue
+                        card_content = json.loads(card_json)
                         
                         if dynamic_type == 8:
                             bvid = card_content.get('bvid', '')

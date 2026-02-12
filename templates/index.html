@@ -46,6 +46,9 @@
         .message.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; display: block; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
         .modal-content { background: white; padding: 30px; border-radius: 8px; text-align: center; max-width: 400px; }
+        .modal-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #333; }
+        .modal-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+        .modal-buttons button { padding: 10px 25px; min-width: 100px; }
     </style>
 </head>
 <body>
@@ -100,6 +103,12 @@
                     </div>
                 </div>
             </div>
+
+            <div class="card" style="grid-column: span 2;">
+                <h2>📋 所有活动（视频+动态+专栏）</h2>
+                <div class="list" id="activityList" style="max-height: 300px;"><div class="empty-state">暂无活动</div></div>
+            </div>
+        </div>
 
             <div class="card">
                 <h2>👤 用户管理</h2>
@@ -203,6 +212,7 @@
             loadVideos();
             loadUsers();
             loadDynamics();
+            loadActivities();
             loadSchedules();
             checkStatus();
             refreshLogs();
@@ -467,6 +477,53 @@
                     updateStats();
                 } else {
                     showMessage('删除失败', 'error');
+                }
+            } catch (e) {
+                showMessage('删除失败: ' + e.message, 'error');
+            }
+        }
+
+        // 活动管理（新架构）
+        async function loadActivities() {
+            try {
+                const r = await fetch('/api/activities');
+                const activities = await r.json();
+                const container = document.getElementById('activityList');
+                if (activities.length === 0) {
+                    container.innerHTML = '<div class="empty-state">暂无活动</div>';
+                    return;
+                }
+                const typeNames = {'video': '📹 视频', 'dynamic': '📝 动态', 'article': '📰 专栏'};
+                container.innerHTML = activities.map(a => `
+                    <div class="list-item">
+                        <div class="list-item-info">
+                            <div class="list-item-title">
+                                ${typeNames[a.activity_type] || a.activity_type} 
+                                <span style="color: #999; font-weight: normal; margin-left: 5px;">${a.owner_name || '未知'}</span>
+                            </div>
+                            <div class="list-item-subtitle">${a.title || a.content || '无标题'}</div>
+                            <div class="list-item-subtitle" style="color: #999; font-size: 11px;">ID: ${a.id}</div>
+                        </div>
+                        <div class="list-item-actions">
+                            <button class="btn-small danger" onclick="deleteActivity('${a.id}')">删除</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('加载活动失败:', e);
+            }
+        }
+
+        async function deleteActivity(activityId) {
+            if (!confirm('确定删除这个活动吗？此操作不可恢复！')) return;
+            try {
+                const r = await fetch(`/api/activities/${activityId}`, {method: 'DELETE'});
+                const result = await r.json();
+                if (result.success) {
+                    showMessage('删除成功', 'success');
+                    loadActivities();
+                } else {
+                    showMessage('删除失败: ' + (result.error || ''), 'error');
                 }
             } catch (e) {
                 showMessage('删除失败: ' + e.message, 'error');

@@ -11,7 +11,7 @@ import requests
 from api import BilibiliAPI
 from core import MonitorEngine, UserManager, ActivityManager, CommentFilter
 
-app = Flask(__name__, static_folder='templates/static', static_url_path='/static')
+app = Flask(__name__)
 
 monitor_process = None
 monitor_thread = None
@@ -40,7 +40,7 @@ def read_logs():
 @app.route('/')
 def index():
     """主页面"""
-    response = render_template('index_new.html')
+    response = render_template('index.html')
     return response, 200, {
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
@@ -199,8 +199,6 @@ def add_user():
         message += f': {uname}'
     if added_items:
         message += f' (自动添加: {", ".join(added_items)})'
-    else:
-        message += ' (用户已添加，未发现新内容)'
 
     return jsonify({'success': success, 'uname': uname, 'message': message})
 
@@ -593,4 +591,4 @@ if __name__ == '__main__':
     db.init_db()
     print("启动Web服务器...")
     print("访问地址: http://localhost:5000")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=True)
