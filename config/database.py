@@ -485,43 +485,51 @@ def delete_monitor_schedule(schedule_id):
         conn.commit()
         return cursor.rowcount > 0
 
+def activate_schedule(schedule_id):
+    """激活指定的時間段配置，將其他配置設為非激活。"""
+    try:
+        with sqlite3.connect(DB_NAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute('UPDATE monitor_schedule SET is_active = 0')
+            cursor.execute('UPDATE monitor_schedule SET is_active = 1 WHERE id = ?', (schedule_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+    except Exception as e:
+        print(f"激活時間段配置時出錯: {e}")
+        return False
+
 def get_current_interval():
     """
     根據當前時間獲取應該的監控間隔（秒）。
-    返回 (interval_seconds, schedule_name) 或默認值 (300, '默認')
+    返回 (interval_seconds, schedule_name, schedule_id) 或默認值 (300, '默認', None)
     """
     now = datetime.datetime.now()
     current_time = now.strftime('%H:%M')
-    current_weekday = now.weekday()  # 0=周一, 6=周日
+    current_weekday = now.weekday()
     
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
         
-        # 首先获取所有激活的时间段
         cursor.execute('''
-            SELECT interval_seconds, name, start_time, end_time, days_of_week FROM monitor_schedule
+            SELECT id, interval_seconds, name, start_time, end_time, days_of_week FROM monitor_schedule
             WHERE is_active = 1
             ORDER BY id
         ''')
         
         schedules = cursor.fetchall()
         
-        # 如果只有一个激活的时间段，直接返回它
         if len(schedules) == 1:
-            interval, name, start_time, end_time, days_of_week = schedules[0]
-            return interval, name
+            schedule_id, interval, name, start_time, end_time, days_of_week = schedules[0]
+            return interval, name, schedule_id
         
-        # 如果有多个激活的时间段，检查当前时间是否在范围内
-        for interval, name, start_time, end_time, days_of_week in schedules:
-            # 檢查星期幾
+        for schedule_id, interval, name, start_time, end_time, days_of_week in schedules:
             days = [int(d) for d in days_of_week.split(',')]
-            # 轉換星期：Python weekday() 0=周一，但數據庫中 0=周日, 1=周一
             db_weekday = (current_weekday + 1) % 7
             if db_weekday in days:
                 if start_time <= current_time <= end_time:
-                    return interval, name
+                    return interval, name, schedule_id
     
-    return 300, '默認(5分鐘)'
+    return 300, '默認(5分鐘)', None
 
 
 # --- 系統設置相關函數 ---
@@ -555,4 +563,31 @@ def get_all_settings():
         cursor = conn.cursor()
         cursor.execute('SELECT key, value FROM system_settings')
         return {row[0]: row[1] for row in cursor.fetchall()}
+
+
+# --- 活動相關函數 ---
+
+def get_all_activities():
+    """獲取所有活動列表。"""
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, activity_type, owner_mid, owner_name, content, title, added_at
+            FROM activities
+            WHERE status = 'active'
+            ORDER BY added_at DESC
+        ''')
+        return cursor.fetchall()
+
+def delete_activity(activity_id):
+    """刪除活動（軟刪除）。"""
+    try:
+        with sqlite3.connect(DB_NAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute('UPDATE activities SET status = ? WHERE id = ?', ('deleted', activity_id))
+            conn.commit()
+            return cursor.rowcount > 0
+    except Exception as e:
+        print(f"刪除活動時出錯: {e}")
+        return False
 

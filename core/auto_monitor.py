@@ -151,50 +151,60 @@ def update_user_latest_video(mid, uname, header):
 def update_user_latest_dynamic(mid, uname, header):
     """
     获取用户最新的动态，并更新到监控列表
-    只保留该用户最新的一个动态，移除该用户之前的老动态
+    保留该用户最新的两条动态
     
     Returns:
-        (新动态ID, 新动态内容) 或 (None, None)
+        [(动态ID, 动态内容, 动态类型), ...] 新添加的动态列表
     """
+    added_dynamics = []
     try:
-        # 获取用户最新的动态（包括图文、文字、视频等）
+        type_names = {8: '视频', 64: '专栏', 2: '图片', 4: '文字', 1: '转发'}
+        
         log(f"[动态] 正在获取用户 {uname}({mid}) 的最新动态...")
         dynamics = user_monitor.get_user_dynamics(mid, header, limit=5)
         if not dynamics:
             log(f"[动态] 用户 {uname} 没有动态")
-            return None, None
+            return []
         
-        # 取最新的一个动态
-        latest_dynamic = dynamics[0]
-        new_dynamic_id = latest_dynamic['dynamic_id']
-        new_content = latest_dynamic['content'][:50] if latest_dynamic['content'] else '[无内容]'
-        new_dynamic_type = latest_dynamic['type']
+        valid_dynamics = [d for d in dynamics if d['type'] in [2, 4, 64, 8]]
         
-        # 检查这个动态是否已经在监控列表中
+        if not valid_dynamics:
+            log(f"[动态] 用户 {uname} 没有可监控的动态（图片/文字/专栏/视频）")
+            return []
+        
+        latest_two = valid_dynamics[:2]
+        
         existing_dynamic_ids = {d[0] for d in db.get_user_monitored_dynamics(mid)}
-        if new_dynamic_id in existing_dynamic_ids:
-            # 动态已经在监控列表中，不需要更新
-            log(f"[动态] 用户 {uname} 的最新动态已经在监控列表中")
-            return None, None
         
-        # 获取该用户之前监控的动态
         old_dynamics = db.get_user_monitored_dynamics(mid)
+        new_dynamic_ids = {d['dynamic_id'] for d in latest_two}
         
-        # 移除该用户之前的老动态
-        for old_dynamic_id, _, _, _, _, _ in old_dynamics:
-            if old_dynamic_id != new_dynamic_id:
+        for old_dynamic in old_dynamics:
+            old_dynamic_id = old_dynamic[0]
+            old_content = old_dynamic[1] if len(old_dynamic) > 1 else ''
+            if old_dynamic_id not in new_dynamic_ids:
                 db.remove_monitored_dynamic(old_dynamic_id)
-                log(f"[移除] 用户 [{uname}] 的老动态: {old_dynamic_id}")
+                content_preview = old_content[:30] if old_content else '无内容'
+                log(f"[移除] 用户 [{uname}] 的老动态: {content_preview}...")
         
-        # 添加新动态到监控列表
-        if db.add_monitored_dynamic(new_dynamic_id, mid, latest_dynamic['content'], new_dynamic_type):
-            log(f"[添加] 用户 [{uname}] 的最新动态: {new_content}... (类型: {new_dynamic_type})")
-            return new_dynamic_id, new_content
+        for dynamic in latest_two:
+            new_dynamic_id = dynamic['dynamic_id']
+            new_content = dynamic['content'] or '[无内容]'
+            new_dynamic_type = dynamic['type']
+            type_name = type_names.get(new_dynamic_type, f'类型{new_dynamic_type}')
+            
+            if new_dynamic_id in existing_dynamic_ids:
+                log(f"[动态] 用户 [{uname}] 的动态已在监控: {type_name} - {new_content[:40]}...")
+                continue
+            
+            if db.add_monitored_dynamic(new_dynamic_id, mid, new_content, new_dynamic_type):
+                log(f"[添加] 用户 [{uname}] 的新动态: {type_name} - {new_content[:40]}...")
+                added_dynamics.append((new_dynamic_id, new_content, new_dynamic_type, type_name))
         
-        return None, None
+        return added_dynamics
     except Exception as e:
         log(f"[错误] 更新用户 {uname} 最新动态时出错: {e}")
-        return None, None
+        return []
 
 
 def check_dynamic_comments(dynamic_id, mid, content, header, seen_ids):
@@ -205,8 +215,10 @@ def check_dynamic_comments(dynamic_id, mid, content, header, seen_ids):
     new_comments_found = []
     
     try:
-        # 获取动态的所有评论
-        comments = user_monitor.fetch_all_dynamic_comments(dynamic_id, header)
+        result = user_monitor.fetch_dynamic_comments(dynamic_id, header)
+        comments = result.get('comments', [])
+        has_more = result.get('has_more', False)
+        
         if not comments:
             return False, []
         
@@ -214,15 +226,12 @@ def check_dynamic_comments(dynamic_id, mid, content, header, seen_ids):
             commenter_mid = str(comment['mid'])
             rpid = comment['rpid']
             
-            # 只监控动态作者自己的评论
             if commenter_mid != mid:
-                # 仍然添加到已见列表，避免重复检查，但不通知
                 if rpid not in seen_ids:
                     seen_ids.add(rpid)
                     db.add_dynamic_comment_to_db(rpid, dynamic_id)
                 continue
             
-            # 检查是否是新评论
             if rpid not in seen_ids:
                 seen_ids.add(rpid)
                 db.add_dynamic_comment_to_db(rpid, dynamic_id)
@@ -230,10 +239,13 @@ def check_dynamic_comments(dynamic_id, mid, content, header, seen_ids):
                 from datetime import datetime
                 import pandas as pd
                 
+                comment_time = datetime.fromtimestamp(comment["ctime"]).strftime('%Y-%m-%d %H:%M:%S')
+                
                 new_comments_found.append({
                     "user": comment['uname'],
                     "message": comment['message'],
-                    "time": pd.to_datetime(comment["ctime"], unit='s', utc=True).tz_convert('Asia/Shanghai'),
+                    "time": comment_time,
+                    "ctime": comment["ctime"],
                     "type": "动态评论"
                 })
         
@@ -294,18 +306,18 @@ def auto_monitor():
         else:
             log("[完成] 所有用户的最新视频已在监控列表中")
         
-        # 自动添加/更新用户动态（保留所有动态）
+        # 自动添加/更新用户动态（保留最新两条动态）
         log("[动态] 检查并更新用户动态...")
         dynamic_added_count = 0
         
         for mid, uname in dynamic_users.items():
-            new_dynamic_id, new_content = update_user_latest_dynamic(mid, uname, header)
-            if new_dynamic_id:
-                dynamic_added_count += 1
+            added = update_user_latest_dynamic(mid, uname, header)
+            if added:
+                dynamic_added_count += len(added)
                 time.sleep(0.5)
         
         if dynamic_added_count > 0:
-            log(f"[完成] 添加了 {dynamic_added_count} 个用户的新动态")
+            log(f"[完成] 添加了 {dynamic_added_count} 条新动态")
         else:
             log("[完成] 所有用户的动态已在监控列表中")
     
@@ -321,7 +333,7 @@ def auto_monitor():
         log("没有视频可监控，仅监控动态")
     
     # 获取监控间隔
-    interval, schedule_name = db.get_current_interval()
+    interval, schedule_name, _ = db.get_current_interval()
     log(f"当前监控频率: {schedule_name} ({interval}秒)")
     
     # 初始化Webhook
@@ -366,19 +378,16 @@ def auto_monitor():
             loop_count += 1
             log(f"\n第 {loop_count} 轮监控开始")
             
-            # 每10轮检查一次用户是否有新视频/动态
-            if loop_count % 10 == 0 and dynamic_users:
-                log("[动态] 检查用户是否有新视频...")
+            # 每轮都检查用户是否有新动态
+            if dynamic_users:
                 for mid, uname in dynamic_users.items():
-                    new_bvid, new_title = update_user_latest_video(mid, uname, header)
-                    if new_bvid:
-                        time.sleep(0.5)
-                
-                log("[动态] 检查用户是否有新动态...")
-                for mid, uname in dynamic_users.items():
-                    new_dynamic_id, new_content = update_user_latest_dynamic(mid, uname, header)
-                    if new_dynamic_id:
-                        time.sleep(0.5)
+                    added = update_user_latest_dynamic(mid, uname, header)
+                    if added:
+                        for dynamic_id, content, dynamic_type, type_name in added:
+                            log(f"[通知] 发现新动态: {type_name} - {content[:40]}...")
+                            if webhook_enabled:
+                                notifier.send_new_dynamic_notification(uname, type_name, content)
+                        time.sleep(0.3)
             
             # 重新获取视频列表（可能有新视频）
             current_videos = db.get_monitored_videos()
@@ -460,21 +469,27 @@ def auto_monitor():
                     )
                     
                     if has_new:
-                        log(f"[新动态评论] [{uname}] 发现 {len(new_comments)} 则新评论！")
+                        log(f"=" * 50)
+                        log(f"[新动态评论] 用户 [{uname}] 发现 {len(new_comments)} 条新评论！")
+                        log(f"动态内容: {content}")
+                        log("-" * 50)
                         for c in new_comments:
-                            log(f"   [{c['type']}] {c['user']}: {c['message'][:50]}...")
+                            log(f"  时间: {c['time']}")
+                            log(f"  用户: {c['user']}")
+                            log(f"  内容: {c['message']}")
+                            log("-" * 30)
                         
                         if webhook_enabled:
                             notifier.send_webhook_notification(f"动态: {content[:30]}...", new_comments)
                     else:
-                        log(f"[检查] [{uname}] 的动态无新评论")
+                        log(f"[检查] [{uname}] 动态无新评论 - {content[:30]}...")
                     
-                    time.sleep(1)  # 避免请求过快
+                    time.sleep(1)
                 except Exception as e:
                     log(f"检查动态 {content[:30]}... 时出错: {e}")
             
             # 检查是否需要更新监控间隔
-            current_interval, current_schedule = db.get_current_interval()
+            current_interval, current_schedule, _ = db.get_current_interval()
             if current_interval != interval:
                 interval = current_interval
                 log(f"监控频率已更新: {current_schedule} ({interval}秒)")

@@ -104,7 +104,7 @@ class MonitorEngine:
                 
                 self._print_statistics(round_new_comments)
                 
-                interval, schedule_name = db.get_current_interval()
+                interval, schedule_name, _ = db.get_current_interval()
                 self.log(f"   - 当前时间段: {schedule_name} ({interval}秒)")
                 
                 self._wait_with_manual_trigger(interval)

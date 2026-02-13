@@ -8,6 +8,7 @@ import datetime
 import pandas as pd
 import subprocess
 import platform
+import urllib.parse
 if platform.system() == "Windows":
     import msvcrt
 else:
@@ -711,7 +712,7 @@ def start_monitoring(targets_to_monitor, header, interval, webhook_enabled, enab
                 print(f"   - 動態視頻數: {dynamic_count}")
             
             # 獲取當前時間段應該的監控間隔
-            current_interval, schedule_name = db.get_current_interval()
+            current_interval, schedule_name, _ = db.get_current_interval()
             print(f"   - 當前時間段: {schedule_name} ({current_interval}秒)")
 
             wait_with_manual_trigger(current_interval)

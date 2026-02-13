@@ -37,15 +37,18 @@ def send_webhook_notification(video_title, new_comments):
         "--------------------------------------"
     ]
     for comment in new_comments:
-        # 清理可能破坏JSON或Markdown的字符
         user = comment['user'].replace('`', '').replace('*', '')
         message = comment['message'].replace('`', '').replace('*', '')
+        
+        comment_time = comment['time']
+        if hasattr(comment_time, 'strftime'):
+            comment_time = comment_time.strftime('%Y-%m-%d %H:%M:%S')
 
         comment_block = (
             f"**用户:** {user}\n"
             f"**类型:** {comment['type']}\n"
             f"**内容:** {message}\n"
-            f"**时间:** {comment['time'].strftime('%Y-%m-%d %H:%M:%S')}"
+            f"**时间:** {comment_time}"
         )
         message_lines.append(comment_block)
         message_lines.append("--------------------------------------")
@@ -69,4 +72,49 @@ def send_webhook_notification(video_title, new_comments):
         print(f"  - [通知] Webhook 通知已成功发送。")
     except requests.exceptions.RequestException as e:
         print(f"  - [错误] 发送 Webhook 通知失败: {e}")
+
+
+def send_new_dynamic_notification(uname, dynamic_type, content):
+    """
+    发送新动态通知到 Webhook。
+    
+    Args:
+        uname: 用户名
+        dynamic_type: 动态类型（图片/文字/专栏/视频）
+        content: 动态内容
+    """
+    if not check_webhook_configured():
+        return
+
+    with open(WEBHOOK_CONFIG_FILE, 'r', encoding='utf-8') as f:
+        webhook_url = f.read().strip()
+
+    import datetime
+    current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    message_lines = [
+        f"🆕 **【{uname}】发布了新动态！**",
+        "--------------------------------------",
+        f"**类型:** {dynamic_type}",
+        f"**时间:** {current_time}",
+        f"**内容:**",
+        content,
+        "--------------------------------------"
+    ]
+
+    full_message = "\n".join(message_lines)
+
+    payload = {
+        "msgtype": "text",
+        "text": {
+            "content": full_message
+        }
+    }
+
+    try:
+        response = requests.post(webhook_url, json=payload, timeout=10)
+        response.raise_for_status()
+        print(f"  - [通知] 新动态 Webhook 通知已成功发送。")
+    except requests.exceptions.RequestException as e:
+        print(f"  - [错误] 发送新动态 Webhook 通知失败: {e}")
 

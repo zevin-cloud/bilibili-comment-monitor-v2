@@ -280,7 +280,7 @@ def fetch_dynamic_comments(dynamic_id, header, next_offset=0):
     Args:
         dynamic_id: 动态ID
         header: 请求头
-        next_offset: 分页偏移量
+        next_offset: 分页偏移量（页码）
         
     Returns:
         {
@@ -299,55 +299,55 @@ def fetch_dynamic_comments(dynamic_id, header, next_offset=0):
     has_more = False
     new_next_offset = 0
     
-    # 只使用最基本的请求头，减少触发反爬虫的风险
     simple_header = {
         'User-Agent': header.get('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'),
         'Cookie': header.get('Cookie', ''),
         'Referer': f'https://t.bilibili.com/{dynamic_id}'
     }
     
-    # 尝试使用评论主API（使用wbi）
-    url = "https://api.bilibili.com/x/v2/reply/wbi/main"
-    params = {
-        'oid': dynamic_id,
-        'type': 17,  # 动态评论类型
-        'mode': 2,
-        'pn': 1,
-        'ps': 20,
-        'sort': 2,
-        'web_location': 1315875
-    }
-    
     try:
-        print(f"尝试API {url}，参数: {params}")
-        
-        # 添加WBI签名
-        img_key, sub_key = get_wbi_keys(simple_header)
-        if img_key and sub_key:
-            params = enc_wbi(params, img_key, sub_key)
-            print(f"添加WBI签名后的参数: {params}")
-        
-        # 添加随机延迟，模拟真实用户行为
-        time.sleep(1)
-        
+        url = "https://api.vc.bilibili.com/dynamic_svr/v1/dynamic_svr/get_dynamic_detail"
+        params = {'dynamic_id': dynamic_id}
         resp = requests.get(url, headers=simple_header, params=params, timeout=10)
-        resp.raise_for_status()
         data = resp.json()
         
-        print(f"API响应: {data}")
+        if data.get('code') != 0:
+            print(f"获取动态详情失败: {data.get('message', '未知错误')}")
+            return {'comments': [], 'next_offset': 0, 'has_more': False}
+        
+        card = data.get('data', {}).get('card', {})
+        card_data = json.loads(card) if isinstance(card, str) else card
+        desc = card_data.get('desc', {})
+        
+        rid = desc.get('rid_str', desc.get('rid', ''))
+        comment_count = desc.get('comment', 0)
+        
+        if not rid:
+            print(f"动态 {dynamic_id} 没有找到评论RID")
+            return {'comments': [], 'next_offset': 0, 'has_more': False}
+        
+        print(f"动态 {dynamic_id} 评论数: {comment_count}, RID: {rid}")
+        
+        page = next_offset if next_offset > 0 else 1
+        url = "https://api.bilibili.com/x/v2/reply"
+        params = {
+            'type': 11,
+            'oid': rid,
+            'pn': page,
+            'ps': 20,
+            'sort': 2
+        }
+        
+        time.sleep(0.5)
+        
+        resp = requests.get(url, headers=simple_header, params=params, timeout=10)
+        data = resp.json()
         
         if data.get('code') == 0:
             reply_data = data.get('data', {})
-            # 检查不同的数据结构
-            if 'replies' in reply_data:
-                replies = reply_data['replies']
-            elif 'list' in reply_data and 'replies' in reply_data['list']:
-                replies = reply_data['list']['replies']
-            else:
-                replies = []
+            replies = reply_data.get('replies', [])
             
             for reply in replies:
-                # 检查不同的评论数据结构
                 if 'member' in reply and 'content' in reply:
                     member = reply['member']
                     content = reply['content']
@@ -359,83 +359,20 @@ def fetch_dynamic_comments(dynamic_id, header, next_offset=0):
                         'ctime': reply.get('ctime', 0)
                     })
             
-            # 检查是否还有更多评论
-            if 'cursor' in reply_data:
-                cursor = reply_data['cursor']
-                has_more = cursor.get('is_end', True) == False
-                new_next_offset = cursor.get('next_offset', 0)
-            elif 'page' in reply_data:
-                page = reply_data['page']
-                has_more = page.get('pn', 1) < page.get('count', 1)
-                new_next_offset = page.get('pn', 1) + 1
+            page_info = reply_data.get('page', {})
+            current_page = page_info.get('pn', page)
+            total_count = page_info.get('count', 0)
+            page_size = page_info.get('size', 20)
             
-            print(f"成功获取到 {len(comments)} 条评论")
+            has_more = current_page * page_size < total_count
+            new_next_offset = current_page + 1 if has_more else 0
+            
+            print(f"成功获取到 {len(comments)} 条评论 (第{current_page}页, 共{total_count}条)")
         else:
-            print(f"API {url} 获取动态 {dynamic_id} 评论失败: {data.get('message', '未知错误')}")
+            print(f"获取评论失败: {data.get('message', '未知错误')}")
             
     except Exception as e:
-        print(f"API {url} 请求动态 {dynamic_id} 评论时出错: {e}")
-    
-    # 如果第一个API失败，尝试使用动态评论专用API
-    if not comments:
-        url = "https://api.vc.bilibili.com/dynamic_svr/v1/dynamic_svr/get_dynamic_reply"
-        params = {
-            'dynamic_id': dynamic_id,
-            'offset': next_offset,
-            'size': 20
-        }
-        
-        try:
-            print(f"尝试API {url}，参数: {params}")
-            
-            # 添加随机延迟，模拟真实用户行为
-            time.sleep(1)
-            
-            resp = requests.get(url, headers=simple_header, params=params, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-            
-            print(f"API响应: {data}")
-            
-            if data.get('code') == 0:
-                reply_data = data.get('data', {})
-                # 检查不同的数据结构
-                if 'replies' in reply_data:
-                    replies = reply_data['replies']
-                elif 'list' in reply_data and 'replies' in reply_data['list']:
-                    replies = reply_data['list']['replies']
-                else:
-                    replies = []
-                
-                for reply in replies:
-                    # 检查不同的评论数据结构
-                    if 'member' in reply and 'content' in reply:
-                        member = reply['member']
-                        content = reply['content']
-                        comments.append({
-                            'rpid': str(reply.get('rpid', '')),
-                            'mid': str(member.get('mid', '')),
-                            'uname': member.get('uname', ''),
-                            'message': content.get('message', ''),
-                            'ctime': reply.get('ctime', 0)
-                        })
-                
-                # 检查是否还有更多评论
-                if 'cursor' in reply_data:
-                    cursor = reply_data['cursor']
-                    has_more = cursor.get('is_end', True) == False
-                    new_next_offset = cursor.get('next_offset', 0)
-                
-                print(f"成功获取到 {len(comments)} 条评论")
-            else:
-                print(f"API {url} 获取动态 {dynamic_id} 评论失败: {data.get('message', '未知错误')}")
-                
-        except Exception as e:
-            print(f"API {url} 请求动态 {dynamic_id} 评论时出错: {e}")
-    
-    # 如果无法获取评论，返回一个友好的错误信息
-    if not comments:
-        print(f"警告: 无法获取动态 {dynamic_id} 的评论，可能是因为API更改或反爬虫限制")
+        print(f"请求动态 {dynamic_id} 评论时出错: {e}")
     
     return {
         'comments': comments,

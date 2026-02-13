@@ -1,15 +1,16 @@
 version: '3.8'
 
 services:
-  bilibili-comment:
+  bilibili-monitor:
     build: .
-    container_name: bilibili-comment
+    container_name: bilibili-comment-monitor
     ports:
-      - "5002:5000"
+      - "5001:5001"
     volumes:
-      - ./bilibili_monitor.db:/app/bilibili_monitor.db
+      - ./data:/app/data
       - ./bili_cookie.txt:/app/bili_cookie.txt
       - ./webhook_config.txt:/app/webhook_config.txt
-    environment:
-      - PYTHONUNBUFFERED=1
+      - ./bilibili_monitor.db:/app/bilibili_monitor.db
     restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai

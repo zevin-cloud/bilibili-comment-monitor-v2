@@ -17,7 +17,7 @@ class Scheduler:
         Returns:
             (interval_seconds, schedule_name)
         """
-        interval, name = db.get_current_interval()
+        interval, name, _ = db.get_current_interval()
         self.current_interval = interval
         self.current_schedule_name = name
         return interval, name

@@ -227,6 +227,29 @@ def delete_dynamic(dynamic_id):
     return jsonify({'success': success})
 
 
+# --- 活动管理API ---
+
+@app.route('/api/activities', methods=['GET'])
+def get_activities():
+    """获取所有活动"""
+    activities = db.get_all_activities()
+    return jsonify([{
+        'id': a[0],
+        'activity_type': a[1],
+        'owner_mid': a[2],
+        'owner_name': a[3],
+        'content': a[4],
+        'title': a[5],
+        'added_at': a[6]
+    } for a in activities])
+
+@app.route('/api/activities/<activity_id>', methods=['DELETE'])
+def delete_activity(activity_id):
+    """删除活动"""
+    success = db.delete_activity(activity_id)
+    return jsonify({'success': success})
+
+
 def is_process_running(pid):
     """检查进程是否运行"""
     try:
@@ -379,9 +402,19 @@ def get_logs():
     """获取日志"""
     lines = read_logs()
     if lines:
-        # 返回最近100行
         return jsonify({'logs': lines[-100:]})
     return jsonify({'logs': []})
+
+@app.route('/api/logs', methods=['DELETE'])
+def clear_logs():
+    """清除日志"""
+    global log_file
+    try:
+        if os.path.exists(log_file):
+            os.remove(log_file)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 
 # --- 时间段配置API ---
@@ -429,13 +462,23 @@ def delete_schedule(schedule_id):
     success = db.delete_monitor_schedule(schedule_id)
     return jsonify({'success': success})
 
+@app.route('/api/schedules/<int:schedule_id>/activate', methods=['POST'])
+def activate_schedule(schedule_id):
+    """激活时间段配置"""
+    success = db.activate_schedule(schedule_id)
+    if success:
+        return jsonify({'success': True, 'message': '激活成功'})
+    else:
+        return jsonify({'success': False, 'error': '激活失败'})
+
 @app.route('/api/current-interval', methods=['GET'])
 def get_current_interval():
     """获取当前时间段的监控间隔"""
-    interval, name = db.get_current_interval()
+    interval, name, schedule_id = db.get_current_interval()
     return jsonify({
         'interval_seconds': interval,
-        'schedule_name': name
+        'schedule_name': name,
+        'schedule_id': schedule_id
     })
 
 
