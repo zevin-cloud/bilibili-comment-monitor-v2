@@ -1,6 +1,6 @@
 # filename: web_server.py
 from flask import Flask, render_template, jsonify, request
-import database as db
+from config import database as db
 import json
 import os
 import subprocess
@@ -8,9 +8,10 @@ import sys
 import threading
 import time
 import requests
+import platform
 
-# 导入用户监控模块
-import user_monitor
+from api import user_monitor, cookie_checker, auto_login
+from core import main
 
 app = Flask(__name__)
 
@@ -69,11 +70,10 @@ def add_video():
     
     try:
         # 导入main模块获取视频信息
-        import main as main_module
-        header = main_module.get_header()
+        header = main.get_header()
         
         # 获取视频信息
-        oid, title, owner_mid = main_module.get_information(bv_id, header)
+        oid, title, owner_mid = main.get_information(bv_id, header)
         
         if oid and title:
             # 添加到数据库
@@ -171,9 +171,8 @@ def add_user():
             if videos:
                 bvid, title = videos[0]
                 # 获取视频详细信息
-                import main as main_module
-                main_header = main_module.get_header()
-                oid, video_title, owner_mid = main_module.get_information(bvid, main_header)
+                main_header = main.get_header()
+                oid, video_title, owner_mid = main.get_information(bvid, main_header)
                 if oid and video_title:
                     if db.add_video_to_db(oid, bvid, video_title, owner_mid):
                         db.add_dynamic_video(bvid, mid, video_title)
@@ -231,10 +230,16 @@ def delete_dynamic(dynamic_id):
 def is_process_running(pid):
     """检查进程是否运行"""
     try:
-        # Windows系统使用tasklist命令
-        subprocess.check_output(['tasklist', '/FI', f'PID eq {pid}'], stderr=subprocess.STDOUT)
-        return True
-    except subprocess.CalledProcessError:
+        if platform.system() == "Windows":
+            # Windows系统使用tasklist命令
+            subprocess.check_output(['tasklist', '/FI', f'PID eq {pid}'], stderr=subprocess.STDOUT)
+            return True
+        else:
+            # macOS/Linux系统使用kill -0命令
+            import signal
+            os.kill(pid, 0)
+            return True
+    except (subprocess.CalledProcessError, ProcessLookupError, OSError):
         return False
 
 @app.route('/api/monitor/status', methods=['GET'])
@@ -306,7 +311,7 @@ def start_monitor():
         
         # 启动监控进程（使用自动监控脚本）
         monitor_process = subprocess.Popen(
-            [sys.executable, 'auto_monitor.py'],
+            [sys.executable, 'core/auto_monitor.py'],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -351,8 +356,12 @@ def stop_monitor():
             with open(pid_file, 'r') as f:
                 saved_pid = int(f.read().strip())
             if is_process_running(saved_pid):
-                # 在Windows系统中，使用taskkill命令终止进程
-                subprocess.run(['taskkill', '/PID', str(saved_pid), '/F'], check=True)
+                # 根据操作系统使用不同的命令终止进程
+                if platform.system() == "Windows":
+                    subprocess.run(['taskkill', '/PID', str(saved_pid), '/F'], check=True)
+                else:
+                    import signal
+                    os.kill(saved_pid, signal.SIGTERM)
             # 删除PID文件
             os.remove(pid_file)
             return jsonify({'success': True})
@@ -489,7 +498,6 @@ def check_dynamic_videos():
                 
                 if new_bvid not in existing_bvids:
                     # 获取视频详细信息
-                    import main
                     oid, video_title, owner_mid = main.get_information(new_bvid, header)
                     if oid and video_title:
                         # 获取该用户之前监控的视频并移除
@@ -524,10 +532,9 @@ def check_dynamic_videos():
 def get_cookie_status():
     """获取Cookie状态"""
     try:
-        import cookie_checker
-        from main import get_header
+        from core import main
         
-        header = get_header()
+        header = main.get_header()
         result = cookie_checker.get_cookie_expiry_info(header)
         
         # 尝试解析过期时间
@@ -574,9 +581,8 @@ def update_cookie():
             f.write(cookie)
         
         # 验证Cookie是否有效
-        import cookie_checker
-        from main import get_header
-        header = get_header()
+        from core import main
+        header = main.get_header()
         result = cookie_checker.get_cookie_expiry_info(header)
         
         if result.get('valid'):
@@ -605,8 +611,7 @@ def generate_login_qrcode():
     """生成登录二维码"""
     global login_manager
     try:
-        from auto_login import AutoLoginManager
-        login_manager = AutoLoginManager()
+        login_manager = auto_login.AutoLoginManager()
         result = login_manager.generate_qrcode()
         return jsonify(result)
     except Exception as e:
@@ -640,5 +645,5 @@ def cancel_login():
 if __name__ == '__main__':
     db.init_db()
     print("启动Web服务器...")
-    print("访问地址: http://localhost:5000")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    print("访问地址: http://localhost:5001")
+    app.run(host='0.0.0.0', port=5001, debug=True)

@@ -496,26 +496,29 @@ def get_current_interval():
     
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
+        
+        # 首先获取所有激活的时间段
         cursor.execute('''
-            SELECT interval_seconds, name FROM monitor_schedule
+            SELECT interval_seconds, name, start_time, end_time, days_of_week FROM monitor_schedule
             WHERE is_active = 1
-            AND start_time <= ? AND end_time >= ?
-        ''', (current_time, current_time))
+            ORDER BY id
+        ''')
         
         schedules = cursor.fetchall()
         
-        for interval, name in schedules:
+        # 如果只有一个激活的时间段，直接返回它
+        if len(schedules) == 1:
+            interval, name, start_time, end_time, days_of_week = schedules[0]
+            return interval, name
+        
+        # 如果有多个激活的时间段，检查当前时间是否在范围内
+        for interval, name, start_time, end_time, days_of_week in schedules:
             # 檢查星期幾
-            cursor.execute('''
-                SELECT days_of_week FROM monitor_schedule
-                WHERE name = ? AND is_active = 1
-            ''', (name,))
-            result = cursor.fetchone()
-            if result:
-                days = [int(d) for d in result[0].split(',')]
-                # 轉換星期：Python weekday() 0=周一，但數據庫中 0=周日, 1=周一
-                db_weekday = (current_weekday + 1) % 7
-                if db_weekday in days:
+            days = [int(d) for d in days_of_week.split(',')]
+            # 轉換星期：Python weekday() 0=周一，但數據庫中 0=周日, 1=周一
+            db_weekday = (current_weekday + 1) % 7
+            if db_weekday in days:
+                if start_time <= current_time <= end_time:
                     return interval, name
     
     return 300, '默認(5分鐘)'

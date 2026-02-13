@@ -1,14 +1,17 @@
 # filename: auto_monitor.py
 """自动监控脚本 - 无需交互，直接开始监控"""
 import sys
+import os
 import time
 import datetime
-from main import get_header, get_information, fetch_latest_comments, process_and_notify_comment, fetch_all_sub_replies
-import database as db
-import notifier
-import user_monitor
 
-# 导入平台相关模块
+# 添加项目根目录到 Python 路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from core.main import get_header, get_information, fetch_latest_comments, process_and_notify_comment, fetch_all_sub_replies
+from config import database as db
+from core import notifier
+from api import user_monitor
 import platform
 if platform.system() == "Windows":
     import msvcrt

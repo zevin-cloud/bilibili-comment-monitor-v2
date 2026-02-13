@@ -1,6 +1,6 @@
 from typing import Tuple
 import datetime
-import database as db
+from config import database as db
 
 
 class Scheduler:

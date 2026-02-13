@@ -1,5 +1,5 @@
 from typing import List, Tuple, Dict, Any, Optional
-import database as db
+from config import database as db
 
 
 class UserManager:

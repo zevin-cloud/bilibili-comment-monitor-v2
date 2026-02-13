@@ -90,7 +90,9 @@ class BilibiliAPI:
                             video_title = card_content.get('title', '')
                             content = card_content.get('dynamic', '')[:100]
                         elif dynamic_type == 64:
+                            article_title = card_content.get('title', '')
                             content = card_content.get('summary', '')[:100]
+                            video_title = article_title
                         elif dynamic_type == 2:
                             item = card_content.get('item', {})
                             content = item.get('description', '')[:100]
@@ -214,6 +216,10 @@ class BilibiliAPI:
         
         url = activity.get_comment_api_url()
         params = activity.get_comment_api_params()
+        
+        if next_offset > 0:
+            params['offset'] = next_offset
+        
         params = self.wbi_manager.sign(params)
         
         try:
@@ -252,9 +258,18 @@ class BilibiliAPI:
                     page = reply_data['page']
                     has_more = page.get('pn', 1) < page.get('count', 1)
                     new_next_offset = page.get('pn', 1) + 1
+                else:
+                    has_more = False
+                    new_next_offset = 0
                 
             else:
-                print(f"[API] 获取活动 {activity.id} 评论失败: {data.get('message', '未知错误')}")
+                error_msg = data.get('message', '未知错误')
+                error_code = data.get('code')
+                print(f"[API] 获取活动 {activity.id} 评论失败: 错误码={error_code}, 错误消息={error_msg}")
+                
+                comments = []
+                has_more = False
+                new_next_offset = 0
                 
         except Exception as e:
             print(f"[API] 请求活动 {activity.id} 评论时出错: {e}")

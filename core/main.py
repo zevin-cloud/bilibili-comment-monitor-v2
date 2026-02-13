@@ -7,20 +7,16 @@ import time
 import datetime
 import pandas as pd
 import subprocess
-import platform  # 导入 platform 模块来判断操作系统
-
-# 根据操作系统导入不同的模块
+import platform
 if platform.system() == "Windows":
     import msvcrt
 else:
     import select
-
-# 导入我们自己的模块
-import database as db
-import notifier
-import bvget  # <-- 新增：导入 bvget 模块
-import user_monitor  # <-- 新增：导入用户监控模块
-from user_monitor import md5, get_wbi_keys, enc_wbi
+from config import database as db
+from core import notifier
+from api import bvget
+from api import user_monitor
+from api.user_monitor import md5, get_wbi_keys, enc_wbi
 
 
 # --- 核心功能函数 ---
@@ -458,25 +454,30 @@ def wait_with_manual_trigger(interval_seconds):
     wait_message = f"等待 {minutes} 分钟 {seconds} 秒后" if minutes > 0 else f"等待 {seconds} 秒后"
 
     print(f"\n所有视频检查完毕。{wait_message}进行下一轮检查...")
-    print("您可以随时按下 [Enter] 键来立即开始下一轮检查。")
 
     start_time = time.time()
     while time.time() - start_time < interval_seconds:
         # 根据操作系统使用不同的方法检测输入
         if platform.system() == "Windows":
             # msvcrt.kbhit() 是非阻塞的，它会立即返回是否有按键事件
-            if msvcrt.kbhit():
-                # msvcrt.getch() 会读取按键，我们检查它是否是 Enter (回车符)
-                if msvcrt.getch() in [b'\r', b'\n']:
-                    print("\n收到手动触发指令，立即开始新一轮检查！")
-                    return  # 立即退出等待
+            try:
+                if msvcrt.kbhit():
+                    # msvcrt.getch() 会读取按键，我们检查它是否是 Enter (回车符)
+                    if msvcrt.getch() in [b'\r', b'\n']:
+                        print("\n收到手动触发指令，立即开始新一轮检查！")
+                        return  # 立即退出等待
+            except:
+                pass
         else:  # Linux, macOS, etc.
             # 使用 select，它在这里工作得很好
-            readable, _, _ = select.select([sys.stdin], [], [], 0.1)  # 短暂等待0.1秒
-            if readable:
-                sys.stdin.readline()  # 清空输入缓冲区
-                print("\n收到手动触发指令，立即开始新一轮检查！")
-                return  # 立即退出等待
+            try:
+                readable, _, _ = select.select([sys.stdin], [], [], 0.1)  # 短暂等待0.1秒
+                if readable:
+                    sys.stdin.readline()  # 清空输入缓冲区
+                    print("\n收到手动触发指令，立即开始新一轮检查！")
+                    return  # 立即退出等待
+            except (OSError, ValueError):
+                pass
 
         time.sleep(0.1)  # 短暂休眠，避免 CPU 占用过高
 

@@ -78,7 +78,9 @@ class VideoActivity(Activity):
             'type': 1,
             'mode': 2,
             'plat': 1,
-            'web_location': 1315875
+            'web_location': 1315875,
+            'pn': 1,
+            'ps': 20
         }
     
     def get_activity_url(self) -> str:

@@ -1,9 +1,9 @@
 from typing import List, Dict, Any, Optional, Set
 import time
-import database as db
+from config import database as db
 import sqlite3
 from api import BilibiliAPI
-from models import Activity, VideoActivity, DynamicActivity
+from models import Activity, VideoActivity, DynamicActivity, ArticleActivity
 from .comment_filter import CommentFilter
 
 
@@ -23,21 +23,31 @@ class ActivityManager:
             uname: 用户名
             
         Returns:
-            新活动列表
+            新活动列表（只包含最新的活动）
         """
         dynamics = self.api.get_user_dynamics(mid, limit=20)
-        new_activities = []
         
-        for dynamic in dynamics:
-            dynamic_id = dynamic['dynamic_id']
-            
-            if self._is_new_activity(dynamic_id):
-                activity = self._create_activity_from_dynamic(dynamic, mid, uname)
-                if activity:
-                    self._save_activity(activity)
-                    new_activities.append(activity)
+        if not dynamics:
+            return []
         
-        return new_activities
+        latest_dynamic = dynamics[0]
+        latest_dynamic_id = latest_dynamic['dynamic_id']
+        
+        if not self._is_new_activity(latest_dynamic_id):
+            return []
+        
+        activity = self._create_activity_from_dynamic(latest_dynamic, mid, uname)
+        if activity:
+            if isinstance(activity, VideoActivity) and not activity.oid:
+                oid, video_title, owner_mid = self.api.get_video_info(activity.bvid)
+                if oid:
+                    activity.oid = oid
+                    activity.title = video_title
+                    activity.owner_mid = owner_mid
+            self._save_activity(activity)
+            return [activity]
+        
+        return []
     
     def _create_activity_from_dynamic(self, dynamic: Dict[str, Any], 
                                      mid: str, uname: str) -> Optional[Activity]:
@@ -49,6 +59,15 @@ class ActivityManager:
                 bvid=dynamic.get('bvid', ''),
                 oid=str(dynamic.get('oid', '')),
                 title=dynamic.get('video_title', ''),
+                owner_mid=mid,
+                owner_name=uname,
+                timestamp=dynamic.get('timestamp', 0)
+            )
+        elif dynamic_type == 64:
+            return ArticleActivity(
+                article_id=dynamic['dynamic_id'],
+                title=dynamic.get('title', ''),
+                content=dynamic.get('summary', ''),
                 owner_mid=mid,
                 owner_name=uname,
                 timestamp=dynamic.get('timestamp', 0)
@@ -89,8 +108,20 @@ class ActivityManager:
                     extra_data = {'bvid': activity.bvid}
                 elif isinstance(activity, DynamicActivity):
                     extra_data = {'dynamic_type': activity.dynamic_type}
+                elif isinstance(activity, ArticleActivity):
+                    extra_data = {}
                 
                 import json
+                
+                content = activity.content
+                title = ''
+                if activity.type == Activity.ACTIVITY_TYPE_VIDEO:
+                    title = activity.content
+                    content = ''
+                elif activity.type == Activity.ACTIVITY_TYPE_ARTICLE:
+                    title = activity.title
+                    content = activity.content
+                
                 cursor.execute('''
                     INSERT OR IGNORE INTO activities 
                     (id, activity_type, owner_mid, owner_name, content, title, extra_data, timestamp)
@@ -100,8 +131,8 @@ class ActivityManager:
                     activity.type,
                     activity.owner_mid,
                     activity.owner_name,
-                    activity.content,
-                    activity.content if activity.type == Activity.ACTIVITY_TYPE_VIDEO else '',
+                    content,
+                    title,
                     json.dumps(extra_data),
                     activity.timestamp
                 ))
