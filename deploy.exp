@@ -1,0 +1,28 @@
+#!/usr/bin/expect -f
+
+set timeout 60
+set password "root"
+set server "192.168.123.211"
+set user "root"
+set remote_dir "/opt/bilibili-comment"
+set local_dir [lindex $argv 0]
+
+spawn ssh -o StrictHostKeyChecking=no ${user}@${server} "mkdir -p ${remote_dir}"
+expect {
+    "password:" {
+        send "${password}\r"
+        expect eof
+    }
+    eof
+}
+
+spawn rsync -avz --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' --exclude '.venv' --exclude 'venv' --exclude '*.log' --exclude '.idea' --exclude '.vscode' -e "ssh -o StrictHostKeyChecking=no" ${local_dir}/ ${user}@${server}:${remote_dir}/
+expect {
+    "password:" {
+        send "${password}\r"
+        expect eof
+    }
+    eof
+}
+
+puts "\n文件传输完成!"

@@ -48,6 +48,13 @@ def index():
         'Expires': '0'
     }
 
+@app.route('/qrcode.png')
+def serve_qrcode():
+    from flask import send_file
+    if os.path.exists('qrcode.png'):
+        return send_file('qrcode.png', mimetype='image/png')
+    return "Not Found", 404
+
 @app.route('/api/videos', methods=['GET'])
 def get_videos():
     """获取所有视频"""
@@ -681,6 +688,39 @@ def cancel_login():
         if login_manager:
             login_manager.stop_login()
         return jsonify({'success': True, 'message': '已取消登录'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@app.route('/api/webhooks', methods=['GET'])
+def get_webhooks():
+    """获取所有配置的Webhook"""
+    config_file = 'webhook_config.txt'
+    webhooks = []
+    if os.path.exists(config_file):
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                webhooks = [line.strip() for line in f.readlines() if line.strip()]
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+    return jsonify({'success': True, 'webhooks': webhooks})
+
+@app.route('/api/webhooks', methods=['POST'])
+def update_webhooks():
+    """更新Webhook配置"""
+    try:
+        data = request.json
+        webhooks = data.get('webhooks', [])
+        
+        # 过滤无效输入
+        valid_webhooks = [w.strip() for w in webhooks if w and w.strip()]
+        
+        config_file = 'webhook_config.txt'
+        with open(config_file, 'w', encoding='utf-8') as f:
+            for w in valid_webhooks:
+                f.write(w + '\n')
+                
+        return jsonify({'success': True, 'message': 'Webhook配置已更新', 'webhooks': valid_webhooks})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 

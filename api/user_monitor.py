@@ -138,7 +138,7 @@ def get_user_dynamic_videos(mid, header, limit=10):
 
 def get_user_dynamics(mid, header, limit=20):
     """
-    获取用户的动态列表（包括文字、图片、视频等）。
+    获取用户的动态列表（包括文字、图片、视频等）。支持充电专属动态。
     
     Args:
         mid: 用户ID
@@ -152,77 +152,96 @@ def get_user_dynamics(mid, header, limit=20):
             'content': 动态内容,
             'timestamp': 发布时间戳,
             'bvid': 视频BV号（如果是视频动态）,
-            'video_title': 视频标题（如果是视频动态）
+            'video_title': 视频标题（如果是视频动态）,
+            'is_exclusive': 是否为充电专属
         }, ...]
     """
     dynamics = []
     
-    # 添加必要的请求头
-    header_copy = header.copy()
-    header_copy['Origin'] = 'https://space.bilibili.com'
-    header_copy['Referer'] = f'https://space.bilibili.com/{mid}/dynamic'
+    # 使用较新的 polymer API，支持充电动态
+    url = f"https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space?host_mid={mid}"
     
-    url = "https://api.vc.bilibili.com/dynamic_svr/v1/dynamic_svr/space_history"
-    params = {
-        'host_uid': mid,
-        'offset_dynamic_id': 0,
-        'need_top': 1
+    # 映射旧版类型ID以保持兼容性
+    type_map = {
+        'DYNAMIC_TYPE_AV': 8,
+        'DYNAMIC_TYPE_DRAW': 2,
+        'DYNAMIC_TYPE_WORD': 4,
+        'DYNAMIC_TYPE_FORWARD': 1,
+        'DYNAMIC_TYPE_ARTICLE': 64,
+        'DYNAMIC_TYPE_COMMON_VERTICAL': 2, # 类似图片
+        'DYNAMIC_TYPE_MEDIALIST': 8, # 播单，暂转为视频
     }
     
     try:
-        resp = requests.get(url, headers=header_copy, params=params, timeout=10)
+        resp = requests.get(url, headers=header, timeout=10)
         resp.raise_for_status()
         data = resp.json()
         
         if data.get('code') == 0:
-            cards = data.get('data', {}).get('cards', [])
+            items = data.get('data', {}).get('items', [])
             
-            for card in cards[:limit]:
-                desc = card.get('desc', {})
-                dynamic_id = str(desc.get('dynamic_id', ''))
-                dynamic_type = desc.get('type', 0)
-                timestamp = desc.get('timestamp', 0)
+            for item in items[:limit]:
+                id_str = item.get('id_str', '')
+                type_str = item.get('type', '')
+                dynamic_type = type_map.get(type_str, 0)
                 
-                # 解析card内容
+                modules = item.get('modules', {})
+                author = modules.get('module_author', {})
+                timestamp = author.get('pub_ts', 0)
+                
+                m_dyn = modules.get('module_dynamic', {})
                 content = ''
                 bvid = ''
                 video_title = ''
                 
-                try:
-                    card_content = json.loads(card.get('card', '{}'))
-                    
-                    # 根据动态类型解析内容
-                    if dynamic_type == 8:  # 视频动态
-                        bvid = card_content.get('bvid', '')
-                        video_title = card_content.get('title', '')
-                        content = card_content.get('dynamic', '')[:100]
-                    elif dynamic_type == 64:  # 专栏动态
-                        content = card_content.get('summary', '')[:100]
-                    elif dynamic_type == 2:  # 图片动态
-                        item = card_content.get('item', {})
-                        content = item.get('description', '')[:100]
-                    elif dynamic_type == 4:  # 文字动态
-                        item = card_content.get('item', {})
-                        content = item.get('content', '')[:100]
-                    elif dynamic_type == 1:  # 转发动态
-                        item = card_content.get('item', {})
-                        content = item.get('content', '')[:100]
-                    else:
-                        # 尝试通用解析
-                        item = card_content.get('item', {})
-                        if isinstance(item, dict):
-                            content = item.get('content', item.get('description', ''))[:100]
-                        
-                except Exception as e:
-                    content = '[解析失败]'
+                # 尝试多种路径获取文本内容
+                if m_dyn:
+                    # 1. 常见描述文本
+                    if m_dyn.get('desc') and m_dyn['desc'].get('text'):
+                        content = m_dyn['desc']['text']
+                    # 2. 新版 Opus 格式
+                    elif m_dyn.get('major') and m_dyn['major'].get('opus') and m_dyn['major']['opus'].get('summary'):
+                        content = m_dyn['major']['opus']['summary'].get('text', '')
+                    # 3. 转发动态内容
+                    elif type_str == 'DYNAMIC_TYPE_FORWARD' and m_dyn.get('desc'):
+                        content = m_dyn['desc'].get('text', '')
                 
+                # 针对视频类型的特殊处理
+                if type_str == 'DYNAMIC_TYPE_AV' and m_dyn.get('major') and m_dyn['major'].get('archive'):
+                    archive = m_dyn['major']['archive']
+                    bvid = archive.get('bvid', '')
+                    video_title = archive.get('title', '')
+                    if not content:
+                        content = archive.get('desc', '')
+                
+                # 检查是否为充电专属
+                is_exclusive = item.get('basic', {}).get('is_only_fans', False)
+                
+                # 如果是充电动态且内容为空，尝试通过详情接口获取（有时feed接口返回null）
+                if is_exclusive and not content:
+                    try:
+                        detail_url = f"https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?id={id_str}"
+                        d_resp = requests.get(detail_url, headers=header, timeout=5)
+                        d_data = d_resp.json()
+                        if d_data.get('code') == 0:
+                            d_item = d_data.get('data', {}).get('item', {})
+                            dm_dyn = d_item.get('modules', {}).get('module_dynamic', {})
+                            if dm_dyn:
+                                if dm_dyn.get('desc') and dm_dyn['desc'].get('text'):
+                                    content = dm_dyn['desc']['text']
+                                elif dm_dyn.get('major') and dm_dyn['major'].get('opus') and dm_dyn['major']['opus'].get('summary'):
+                                    content = dm_dyn['major']['opus']['summary'].get('text', '')
+                    except:
+                        pass
+
                 dynamics.append({
-                    'dynamic_id': dynamic_id,
+                    'dynamic_id': id_str,
                     'type': dynamic_type,
                     'content': content,
                     'timestamp': timestamp,
                     'bvid': bvid,
-                    'video_title': video_title
+                    'video_title': video_title,
+                    'is_exclusive': is_exclusive
                 })
         else:
             print(f"获取用户 {mid} 动态失败: {data.get('message', '未知错误')}")
@@ -319,20 +338,35 @@ def fetch_dynamic_comments(dynamic_id, header, next_offset=0):
         card_data = json.loads(card) if isinstance(card, str) else card
         desc = card_data.get('desc', {})
         
-        rid = desc.get('rid_str', desc.get('rid', ''))
+        dynamic_type = desc.get('type', 0)
         comment_count = desc.get('comment', 0)
         
-        if not rid:
-            print(f"动态 {dynamic_id} 没有找到评论RID")
+        comment_type = 11
+        oid = ''
+        
+        if dynamic_type == 8:
+            comment_type = 1
+            oid = desc.get('rid_str', desc.get('rid', ''))
+            if not oid:
+                stat = card_data.get('stat', {})
+                oid = stat.get('aid', '')
+            print(f"视频动态 {dynamic_id} - 使用视频评论接口 type=1, aid={oid}")
+        else:
+            comment_type = 11
+            oid = desc.get('rid_str', desc.get('rid', ''))
+            print(f"图文/文字动态 {dynamic_id} - 使用动态评论接口 type=11, rid={oid}")
+        
+        if not oid:
+            print(f"动态 {dynamic_id} 没有找到评论OID")
             return {'comments': [], 'next_offset': 0, 'has_more': False}
         
-        print(f"动态 {dynamic_id} 评论数: {comment_count}, RID: {rid}")
+        print(f"动态 {dynamic_id} 评论数: {comment_count}, OID: {oid}, 评论类型: {comment_type}")
         
         page = next_offset if next_offset > 0 else 1
         url = "https://api.bilibili.com/x/v2/reply"
         params = {
-            'type': 11,
-            'oid': rid,
+            'type': comment_type,
+            'oid': oid,
             'pn': page,
             'ps': 20,
             'sort': 2
@@ -412,3 +446,74 @@ def fetch_all_dynamic_comments(dynamic_id, header):
         time.sleep(0.5)  # 避免请求过快
     
     return all_comments
+
+def get_followed_feed(header, limit=20):
+    """
+    获取当前登录账号关注者的动态流（Feed All）。
+    包含充电专属动态，比空间接口更全面。
+    
+    Args:
+        header: 请求头
+        limit: 限制数量
+        
+    Returns:
+        [{
+            'mid': 发布者ID,
+            'uname': 发布者名字,
+            'dynamic_id': 动态ID,
+            'type': 动态类型,
+            'content': 内容,
+            'timestamp': 时间戳,
+            'is_exclusive': 是否专属
+        }, ...]
+    """
+    url = "https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/all"
+    
+    type_map = {
+        'DYNAMIC_TYPE_AV': 8,
+        'DYNAMIC_TYPE_DRAW': 2,
+        'DYNAMIC_TYPE_WORD': 4,
+        'DYNAMIC_TYPE_FORWARD': 1,
+        'DYNAMIC_TYPE_ARTICLE': 64,
+        'DYNAMIC_TYPE_COMMON_VERTICAL': 2,
+        'DYNAMIC_TYPE_MEDIALIST': 8,
+    }
+    
+    results = []
+    try:
+        resp = requests.get(url, headers=header, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        
+        if data.get('code') == 0:
+            items = data.get('data', {}).get('items', [])
+            for item in items[:limit]:
+                modules = item.get('modules', {})
+                author = modules.get('module_author', {})
+                
+                type_str = item.get('type', '')
+                dynamic_type = type_map.get(type_str, 0)
+                
+                m_dyn = modules.get('module_dynamic', {})
+                content = ''
+                if m_dyn:
+                    if m_dyn.get('desc') and m_dyn['desc'].get('text'):
+                        content = m_dyn['desc']['text']
+                    elif m_dyn.get('major') and m_dyn['major'].get('opus') and m_dyn['major']['opus'].get('summary'):
+                        content = m_dyn['major']['opus']['summary'].get('text', '')
+                
+                is_exclusive = item.get('basic', {}).get('is_only_fans', False)
+                
+                results.append({
+                    'mid': str(author.get('mid', '')),
+                    'uname': author.get('name', ''),
+                    'dynamic_id': item.get('id_str', ''),
+                    'type': dynamic_type,
+                    'content': content,
+                    'timestamp': author.get('pub_ts', 0),
+                    'is_exclusive': is_exclusive
+                })
+    except Exception as e:
+        print(f"获取关注动态流失败: {e}")
+        
+    return results

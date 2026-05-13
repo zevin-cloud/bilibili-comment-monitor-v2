@@ -1,0 +1,51 @@
+#!/usr/bin/expect -f
+
+set timeout 120
+set password "root"
+set server "192.168.123.211"
+set user "root"
+set remote_dir "/opt/bilibili-comment"
+set local_dir "/Users/zevin/Desktop/fit2cloud/code/bilibili-comment"
+
+spawn rsync -avz --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' --exclude '.venv' --exclude 'venv' --exclude '*.log' --exclude '.idea' --exclude '.vscode' --exclude '*.db' --exclude 'monitor.pid' -e "ssh -o StrictHostKeyChecking=no" ${local_dir}/ ${user}@${server}:${remote_dir}/
+expect {
+    "password:" {
+        send "${password}\r"
+        expect eof
+    }
+    eof
+}
+
+puts "\n文件传输完成!"
+
+spawn ssh -o StrictHostKeyChecking=no ${user}@${server}
+expect {
+    "password:" {
+        send "${password}\r"
+    }
+}
+
+expect "#"
+send "cd /opt/bilibili-comment\r"
+
+expect "#"
+send "docker compose down && docker compose up -d --build\r"
+
+expect {
+    "Started" {
+        puts "容器启动成功"
+    }
+    timeout {
+        puts "等待超时"
+    }
+}
+
+expect "#"
+send "docker ps | grep bilibili\r"
+
+expect "#"
+send "exit\r"
+
+expect eof
+
+puts "\n部署完成!"

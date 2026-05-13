@@ -148,10 +148,16 @@ def update_user_latest_video(mid, uname, header):
         return None, None
 
 
-def update_user_latest_dynamic(mid, uname, header):
+def update_user_latest_dynamic(mid, uname, header, dynamics=None):
     """
     获取用户最新的动态，并更新到监控列表
     保留该用户最新的两条动态
+    
+    Args:
+        mid: 用户ID
+        uname: 用户名
+        header: 请求头
+        dynamics: 可选，预取到的动态列表
     
     Returns:
         [(动态ID, 动态内容, 动态类型), ...] 新添加的动态列表
@@ -160,16 +166,22 @@ def update_user_latest_dynamic(mid, uname, header):
     try:
         type_names = {8: '视频', 64: '专栏', 2: '图片', 4: '文字', 1: '转发'}
         
-        log(f"[动态] 正在获取用户 {uname}({mid}) 的最新动态...")
-        dynamics = user_monitor.get_user_dynamics(mid, header, limit=5)
-        if not dynamics:
-            log(f"[动态] 用户 {uname} 没有动态")
+        # 过滤出该用户的动态（如果是从全局流里传进来的）
+        user_dynamics = []
+        if dynamics is not None:
+            user_dynamics = [d for d in dynamics if str(d.get('mid', '')) == str(mid)]
+        
+        # 如果预取流里没找到该用户，则请求其个人空间
+        if not user_dynamics:
+            log(f"[动态] 正在获取用户 {uname}({mid}) 的空间动态...")
+            user_dynamics = user_monitor.get_user_dynamics(mid, header, limit=5)
+            
+        if not user_dynamics:
             return []
         
-        valid_dynamics = [d for d in dynamics if d['type'] in [2, 4, 64, 8]]
+        valid_dynamics = [d for d in user_dynamics if d['type'] in [2, 4, 64, 8, 1]]
         
         if not valid_dynamics:
-            log(f"[动态] 用户 {uname} 没有可监控的动态（图片/文字/专栏/视频）")
             return []
         
         latest_two = valid_dynamics[:2]
@@ -179,27 +191,29 @@ def update_user_latest_dynamic(mid, uname, header):
         old_dynamics = db.get_user_monitored_dynamics(mid)
         new_dynamic_ids = {d['dynamic_id'] for d in latest_two}
         
+        # 移除不在前两条中的老动态
         for old_dynamic in old_dynamics:
             old_dynamic_id = old_dynamic[0]
-            old_content = old_dynamic[1] if len(old_dynamic) > 1 else ''
             if old_dynamic_id not in new_dynamic_ids:
                 db.remove_monitored_dynamic(old_dynamic_id)
-                content_preview = old_content[:30] if old_content else '无内容'
-                log(f"[移除] 用户 [{uname}] 的老动态: {content_preview}...")
+                log(f"[移除] 用户 [{uname}] 的老动态 ID: {old_dynamic_id}")
         
         for dynamic in latest_two:
             new_dynamic_id = dynamic['dynamic_id']
             new_content = dynamic['content'] or '[无内容]'
             new_dynamic_type = dynamic['type']
-            type_name = type_names.get(new_dynamic_type, f'类型{new_dynamic_type}')
+            
+            # 检查是否为充电专属
+            is_exclusive = dynamic.get('is_exclusive', False)
+            base_type_name = type_names.get(new_dynamic_type, f'类型{new_dynamic_type}')
+            type_name = f"充电专属{base_type_name}" if is_exclusive else base_type_name
             
             if new_dynamic_id in existing_dynamic_ids:
-                log(f"[动态] 用户 [{uname}] 的动态已在监控: {type_name} - {new_content[:40]}...")
                 continue
             
             if db.add_monitored_dynamic(new_dynamic_id, mid, new_content, new_dynamic_type):
                 log(f"[添加] 用户 [{uname}] 的新动态: {type_name} - {new_content[:40]}...")
-                added_dynamics.append((new_dynamic_id, new_content, new_dynamic_type, type_name))
+                added_dynamics.append((new_dynamic_id, new_content, new_dynamic_type, type_name, dynamic['timestamp']))
         
         return added_dynamics
     except Exception as e:
@@ -378,15 +392,31 @@ def auto_monitor():
             loop_count += 1
             log(f"\n第 {loop_count} 轮监控开始")
             
+            # 每轮都重新获取启用了动态监控的用户列表
+            dynamic_users = db.get_dynamic_monitored_user_mids()
+            if dynamic_users:
+                log(f"[用户] 有 {len(dynamic_users)} 个用户启用了动态监控")
+                
+                # 获取并显示用户名
+                for mid in list(dynamic_users.keys()):
+                    uname, _ = user_monitor.get_user_info(mid, header)
+                    if uname:
+                        dynamic_users[mid] = uname
+            
             # 每轮都检查用户是否有新动态
             if dynamic_users:
+                # 1. 优先获取关注流（能抓到充电动态）
+                log("[动态] 正在从关注流中预取动态...")
+                followed_dynamics = user_monitor.get_followed_feed(header)
+                
                 for mid, uname in dynamic_users.items():
-                    added = update_user_latest_dynamic(mid, uname, header)
+                    # 尝试更新动态，传入预取的关注流数据
+                    added = update_user_latest_dynamic(mid, uname, header, dynamics=followed_dynamics)
                     if added:
-                        for dynamic_id, content, dynamic_type, type_name in added:
+                        for dynamic_id, content, dynamic_type, type_name, pub_ts in added:
                             log(f"[通知] 发现新动态: {type_name} - {content[:40]}...")
                             if webhook_enabled:
-                                notifier.send_new_dynamic_notification(uname, type_name, content)
+                                notifier.send_new_dynamic_notification(uname, type_name, content, pub_ts)
                         time.sleep(0.3)
             
             # 重新获取视频列表（可能有新视频）

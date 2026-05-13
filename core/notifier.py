@@ -7,13 +7,15 @@ WEBHOOK_CONFIG_FILE = 'webhook_config.txt'
 
 
 def check_webhook_configured():
-    """检查 Webhook 配置文件是否存在且不为空。"""
+    """检查 Webhook 配置文件是否存在且包含至少一个有效的URL。"""
     if not os.path.exists(WEBHOOK_CONFIG_FILE):
         return False
     try:
         with open(WEBHOOK_CONFIG_FILE, 'r', encoding='utf-8') as f:
-            # 确保读取到的URL不只是空白字符
-            return f.read().strip() != ""
+            lines = f.readlines()
+            # 过滤掉空白行
+            valid_urls = [line.strip() for line in lines if line.strip()]
+            return len(valid_urls) > 0
     except Exception:
         return False
 
@@ -28,7 +30,7 @@ def send_webhook_notification(video_title, new_comments):
         return
 
     with open(WEBHOOK_CONFIG_FILE, 'r', encoding='utf-8') as f:
-        webhook_url = f.read().strip()
+        webhook_urls = [line.strip() for line in f.readlines() if line.strip()]
 
     # 格式化通知内容
     # 这种格式在大多数平台上都表现良好
@@ -64,17 +66,18 @@ def send_webhook_notification(video_title, new_comments):
             } 
         }
 
-    # 发送POST请求
-    try:
-        response = requests.post(webhook_url, json=payload, timeout=10)
-        # 检查响应状态码，如果是不成功的状态码（如4xx, 5xx），则会抛出异常
-        response.raise_for_status()
-        print(f"  - [通知] Webhook 通知已成功发送。")
-    except requests.exceptions.RequestException as e:
-        print(f"  - [错误] 发送 Webhook 通知失败: {e}")
+    # 遍历所有 Webhook URL 发送请求
+    for webhook_url in webhook_urls:
+        try:
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            # 检查响应状态码，如果是不成功的状态码（如4xx, 5xx），则会抛出异常
+            response.raise_for_status()
+            print(f"  - [通知] Webhook 通知已成功发送至 {webhook_url[:30]}...")
+        except requests.exceptions.RequestException as e:
+            print(f"  - [错误] 发送 Webhook 通知到 {webhook_url[:30]}... 失败: {e}")
 
 
-def send_new_dynamic_notification(uname, dynamic_type, content):
+def send_new_dynamic_notification(uname, dynamic_type, content, pub_ts=None):
     """
     发送新动态通知到 Webhook。
     
@@ -82,21 +85,25 @@ def send_new_dynamic_notification(uname, dynamic_type, content):
         uname: 用户名
         dynamic_type: 动态类型（图片/文字/专栏/视频）
         content: 动态内容
+        pub_ts: 动态发布的原始时间戳
     """
     if not check_webhook_configured():
         return
 
     with open(WEBHOOK_CONFIG_FILE, 'r', encoding='utf-8') as f:
-        webhook_url = f.read().strip()
+        webhook_urls = [line.strip() for line in f.readlines() if line.strip()]
 
     import datetime
-    current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    if pub_ts:
+        display_time = datetime.datetime.fromtimestamp(pub_ts).strftime('%Y-%m-%d %H:%M:%S')
+    else:
+        display_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     message_lines = [
         f"🆕 **【{uname}】发布了新动态！**",
         "--------------------------------------",
         f"**类型:** {dynamic_type}",
-        f"**时间:** {current_time}",
+        f"**时间:** {display_time}",
         f"**内容:**",
         content,
         "--------------------------------------"
@@ -111,10 +118,11 @@ def send_new_dynamic_notification(uname, dynamic_type, content):
         }
     }
 
-    try:
-        response = requests.post(webhook_url, json=payload, timeout=10)
-        response.raise_for_status()
-        print(f"  - [通知] 新动态 Webhook 通知已成功发送。")
-    except requests.exceptions.RequestException as e:
-        print(f"  - [错误] 发送新动态 Webhook 通知失败: {e}")
+    for webhook_url in webhook_urls:
+        try:
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            response.raise_for_status()
+            print(f"  - [通知] 新动态 Webhook 通知已成功发送至 {webhook_url[:30]}...")
+        except requests.exceptions.RequestException as e:
+            print(f"  - [错误] 发送新动态 Webhook 通知到 {webhook_url[:30]}... 失败: {e}")
 
