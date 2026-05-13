@@ -1,4 +1,5 @@
 # filename: bvget.py
+from __future__ import annotations
 import requests
 import time
 import os

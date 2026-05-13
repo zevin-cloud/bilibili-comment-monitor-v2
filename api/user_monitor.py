@@ -54,16 +54,7 @@ def enc_wbi(params, img_key, sub_key):
 
 
 def get_user_info(mid, header):
-    """
-    通過用戶ID獲取用戶信息。
-    
-    Args:
-        mid: 用戶ID
-        header: 請求頭
-        
-    Returns:
-        (uname, face) 或 (None, None)
-    """
+    """通過用戶ID獲取用戶信息。"""
     url = f"https://api.bilibili.com/x/web-interface/card?mid={mid}"
     try:
         resp = requests.get(url, headers=header, timeout=5)
@@ -80,22 +71,9 @@ def get_user_info(mid, header):
 
 
 def get_user_dynamic_videos(mid, header, limit=10):
-    """
-    獲取用戶最新發布的視頻（從動態中獲取）。
-    
-    Args:
-        mid: 用戶ID
-        header: 請求頭
-        limit: 最多獲取多少個視頻
-        
-    Returns:
-        [(bvid, title), ...] 列表
-    """
+    """獲取用戶最新發布的視頻（從動態中獲取）。"""
     videos = []
-    # 使用 space 接口獲取用戶投稿視頻
     url = f"https://api.bilibili.com/x/space/wbi/arc/search"
-    
-    # 構建 wbi 簽名參數
     mixin_key_salt = "ea1db124af3c7062474693fa704f4ff8"
     params = {
         'mid': mid,
@@ -103,14 +81,12 @@ def get_user_dynamic_videos(mid, header, limit=10):
         'tid': 0,
         'pn': 1,
         'keyword': '',
-        'order': 'pubdate',  # 按發布時間排序
+        'order': 'pubdate',
         'platform': 'web',
         'web_location': '1550101',
         'order_avoided': 'true',
         'wts': int(time.time())
     }
-    
-    # 計算 w_rid
     query_for_w_rid = urllib.parse.urlencode(sorted(params.items()))
     w_rid = md5(query_for_w_rid + mixin_key_salt)
     params['w_rid'] = w_rid
@@ -119,7 +95,6 @@ def get_user_dynamic_videos(mid, header, limit=10):
         resp = requests.get(url, headers=header, params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
-        
         if data.get('code') == 0:
             vlist = data.get('data', {}).get('list', {}).get('vlist', [])
             for item in vlist:
@@ -127,97 +102,61 @@ def get_user_dynamic_videos(mid, header, limit=10):
                 title = item.get('title')
                 if bvid and title:
                     videos.append((bvid, title))
-        else:
-            print(f"獲取用戶 {mid} 視頻列表失敗: {data.get('message', '未知錯誤')}")
-            
     except Exception as e:
         print(f"請求用戶 {mid} 視頻列表時出錯: {e}")
-    
     return videos
 
 
 def get_user_dynamics(mid, header, limit=20):
-    """
-    获取用户的动态列表（包括文字、图片、视频等）。支持充电专属动态。
-    
-    Args:
-        mid: 用户ID
-        header: 请求头
-        limit: 最多获取多少条动态
-        
-    Returns:
-        [{
-            'dynamic_id': 动态ID,
-            'type': 动态类型,
-            'content': 动态内容,
-            'timestamp': 发布时间戳,
-            'bvid': 视频BV号（如果是视频动态）,
-            'video_title': 视频标题（如果是视频动态）,
-            'is_exclusive': 是否为充电专属
-        }, ...]
-    """
+    """获取用户的动态列表（包括文字、图片、视频等）。支持充电专属动态。"""
     dynamics = []
     
-    # 使用较新的 polymer API，支持充电动态
+    # 1. 获取普通动态
     url = f"https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space?host_mid={mid}"
-    
-    # 映射旧版类型ID以保持兼容性
     type_map = {
         'DYNAMIC_TYPE_AV': 8,
         'DYNAMIC_TYPE_DRAW': 2,
         'DYNAMIC_TYPE_WORD': 4,
         'DYNAMIC_TYPE_FORWARD': 1,
         'DYNAMIC_TYPE_ARTICLE': 64,
-        'DYNAMIC_TYPE_COMMON_VERTICAL': 2, # 类似图片
-        'DYNAMIC_TYPE_MEDIALIST': 8, # 播单，暂转为视频
+        'DYNAMIC_TYPE_COMMON_VERTICAL': 2,
+        'DYNAMIC_TYPE_MEDIALIST': 8,
     }
     
     try:
         resp = requests.get(url, headers=header, timeout=10)
         resp.raise_for_status()
         data = resp.json()
-        
         if data.get('code') == 0:
             items = data.get('data', {}).get('items', [])
-            
-            for item in items[:limit]:
+            for item in items:
                 id_str = item.get('id_str', '')
                 type_str = item.get('type', '')
                 dynamic_type = type_map.get(type_str, 0)
-                
                 modules = item.get('modules', {})
                 author = modules.get('module_author', {})
                 timestamp = author.get('pub_ts', 0)
-                
                 m_dyn = modules.get('module_dynamic', {})
                 content = ''
                 bvid = ''
                 video_title = ''
-                
-                # 尝试多种路径获取文本内容
                 if m_dyn:
-                    # 1. 常见描述文本
                     if m_dyn.get('desc') and m_dyn['desc'].get('text'):
                         content = m_dyn['desc']['text']
-                    # 2. 新版 Opus 格式
                     elif m_dyn.get('major') and m_dyn['major'].get('opus') and m_dyn['major']['opus'].get('summary'):
                         content = m_dyn['major']['opus']['summary'].get('text', '')
-                    # 3. 转发动态内容
-                    elif type_str == 'DYNAMIC_TYPE_FORWARD' and m_dyn.get('desc'):
-                        content = m_dyn['desc'].get('text', '')
-                
-                # 针对视频类型的特殊处理
                 if type_str == 'DYNAMIC_TYPE_AV' and m_dyn.get('major') and m_dyn['major'].get('archive'):
                     archive = m_dyn['major']['archive']
                     bvid = archive.get('bvid', '')
                     video_title = archive.get('title', '')
-                    if not content:
-                        content = archive.get('desc', '')
+                    if not content: content = archive.get('desc', '')
                 
-                # 检查是否为充电专属
                 is_exclusive = item.get('basic', {}).get('is_only_fans', False)
+                basic = item.get('basic', {})
+                comment_oid = basic.get('comment_id_str')
+                comment_type = basic.get('comment_type')
                 
-                # 如果是充电动态且内容为空，尝试通过详情接口获取（有时feed接口返回null）
+                # 如果是专属动态但内容为空，尝试获取详情
                 if is_exclusive and not content:
                     try:
                         detail_url = f"https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?id={id_str}"
@@ -231,8 +170,10 @@ def get_user_dynamics(mid, header, limit=20):
                                     content = dm_dyn['desc']['text']
                                 elif dm_dyn.get('major') and dm_dyn['major'].get('opus') and dm_dyn['major']['opus'].get('summary'):
                                     content = dm_dyn['major']['opus']['summary'].get('text', '')
-                    except:
-                        pass
+                            d_basic = d_item.get('basic', {})
+                            comment_oid = d_basic.get('comment_id_str') or comment_oid
+                            comment_type = d_basic.get('comment_type') or comment_type
+                    except: pass
 
                 dynamics.append({
                     'dynamic_id': id_str,
@@ -241,146 +182,97 @@ def get_user_dynamics(mid, header, limit=20):
                     'timestamp': timestamp,
                     'bvid': bvid,
                     'video_title': video_title,
-                    'is_exclusive': is_exclusive
+                    'is_exclusive': is_exclusive,
+                    'comment_oid': comment_oid,
+                    'comment_type': comment_type
                 })
-        else:
-            print(f"获取用户 {mid} 动态失败: {data.get('message', '未知错误')}")
-            
     except Exception as e:
-        print(f"请求用户 {mid} 动态时出错: {e}")
-    
-    return dynamics
+        print(f"请求用户 {mid} 普通动态时出错: {e}")
+
+    # 2. 获取充电专属动态 (专用接口)
+    try:
+        charging_url = "https://api.bilibili.com/x/charging/v1/user/dynamic"
+        params = {'mid': mid}
+        c_resp = requests.get(charging_url, headers=header, params=params, timeout=10)
+        c_data = c_resp.json()
+        if c_data.get('code') == 0:
+            c_items = c_data.get('data', {}).get('list', [])
+            existing_ids = {d['dynamic_id'] for d in dynamics}
+            for c_item in c_items:
+                did = c_item.get('dynamic_id') or str(c_item.get('id', ''))
+                if did in existing_ids:
+                    continue
+                
+                dynamics.append({
+                    'dynamic_id': did,
+                    'type': 2, # 充电动态通常是图文，映射为2
+                    'content': c_item.get('content', ''),
+                    'timestamp': c_item.get('ctime', 0),
+                    'bvid': '',
+                    'video_title': '',
+                    'is_exclusive': True,
+                    'comment_oid': c_item.get('comment_id') or did,
+                    'comment_type': c_item.get('comment_type') or 17
+                })
+    except Exception as e:
+        print(f"请求用户 {mid} 充电专属动态时出错: {e}")
+
+    # 按时间戳降序排序，并取前 limit 条
+    dynamics.sort(key=lambda x: x['timestamp'], reverse=True)
+    return dynamics[:limit]
+
 
 
 def search_user_by_keyword(keyword, header):
-    """
-    通過關鍵詞搜索用戶。
-    
-    Args:
-        keyword: 搜索關鍵詞
-        header: 請求頭
-        
-    Returns:
-        [(mid, uname), ...] 列表
-    """
+    """通過關鍵詞搜索用戶。"""
     users = []
     url = "https://api.bilibili.com/x/web-interface/search/type"
-    params = {
-        'keyword': keyword,
-        'search_type': 'bili_user',
-        'page': 1
-    }
-    
+    params = {'keyword': keyword, 'search_type': 'bili_user', 'page': 1}
     try:
         resp = requests.get(url, headers=header, params=params, timeout=10)
-        resp.raise_for_status()
         data = resp.json()
-        
         if data.get('code') == 0:
             result = data.get('data', {}).get('result', [])
             for item in result:
                 mid = str(item.get('mid'))
                 uname = item.get('uname')
-                if mid and uname:
-                    users.append((mid, uname))
-        else:
-            print(f"搜索用戶失敗: {data.get('message', '未知錯誤')}")
-            
+                if mid and uname: users.append((mid, uname))
     except Exception as e:
         print(f"搜索用戶時出錯: {e}")
-    
     return users
 
 
-def fetch_dynamic_comments(dynamic_id, header, next_offset=0):
-    """
-    获取动态的评论列表。
-    
-    Args:
-        dynamic_id: 动态ID
-        header: 请求头
-        next_offset: 分页偏移量（页码）
-        
-    Returns:
-        {
-            'comments': [{
-                'rpid': 评论ID,
-                'mid': 用户MID,
-                'uname': 用户名,
-                'message': 评论内容,
-                'ctime': 发布时间
-            }, ...],
-            'next_offset': 下一页偏移量,
-            'has_more': 是否还有更多
-        }
-    """
+def fetch_dynamic_comments(dynamic_id, header, next_offset=0, oid=None, comment_type=None):
+    """获取动态的评论列表。支持传入预先获取的 oid 和 comment_type。"""
     comments = []
     has_more = False
     new_next_offset = 0
-    
     simple_header = {
         'User-Agent': header.get('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'),
         'Cookie': header.get('Cookie', ''),
         'Referer': f'https://t.bilibili.com/{dynamic_id}'
     }
-    
     try:
-        url = "https://api.vc.bilibili.com/dynamic_svr/v1/dynamic_svr/get_dynamic_detail"
-        params = {'dynamic_id': dynamic_id}
-        resp = requests.get(url, headers=simple_header, params=params, timeout=10)
-        data = resp.json()
-        
-        if data.get('code') != 0:
-            print(f"获取动态详情失败: {data.get('message', '未知错误')}")
-            return {'comments': [], 'next_offset': 0, 'has_more': False}
-        
-        card = data.get('data', {}).get('card', {})
-        card_data = json.loads(card) if isinstance(card, str) else card
-        desc = card_data.get('desc', {})
-        
-        dynamic_type = desc.get('type', 0)
-        comment_count = desc.get('comment', 0)
-        
-        comment_type = 11
-        oid = ''
-        
-        if dynamic_type == 8:
-            comment_type = 1
-            oid = desc.get('rid_str', desc.get('rid', ''))
-            if not oid:
-                stat = card_data.get('stat', {})
-                oid = stat.get('aid', '')
-            print(f"视频动态 {dynamic_id} - 使用视频评论接口 type=1, aid={oid}")
-        else:
-            comment_type = 11
-            oid = desc.get('rid_str', desc.get('rid', ''))
-            print(f"图文/文字动态 {dynamic_id} - 使用动态评论接口 type=11, rid={oid}")
-        
-        if not oid:
-            print(f"动态 {dynamic_id} 没有找到评论OID")
-            return {'comments': [], 'next_offset': 0, 'has_more': False}
-        
-        print(f"动态 {dynamic_id} 评论数: {comment_count}, OID: {oid}, 评论类型: {comment_type}")
+        if not oid or not comment_type:
+            detail_url = f"https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?id={dynamic_id}"
+            resp = requests.get(detail_url, headers=header, timeout=10)
+            data = resp.json()
+            if data.get('code') != 0: return {'comments': [], 'next_offset': 0, 'has_more': False}
+            item = data.get('data', {}).get('item', {})
+            basic = item.get('basic', {})
+            oid = basic.get('comment_id_str')
+            comment_type = basic.get('comment_type')
+        if not oid or not comment_type: return {'comments': [], 'next_offset': 0, 'has_more': False}
         
         page = next_offset if next_offset > 0 else 1
         url = "https://api.bilibili.com/x/v2/reply"
-        params = {
-            'type': comment_type,
-            'oid': oid,
-            'pn': page,
-            'ps': 20,
-            'sort': 2
-        }
-        
-        time.sleep(0.5)
-        
+        params = {'type': comment_type, 'oid': oid, 'pn': page, 'ps': 20, 'sort': 2}
+        time.sleep(0.3)
         resp = requests.get(url, headers=simple_header, params=params, timeout=10)
         data = resp.json()
-        
         if data.get('code') == 0:
-            reply_data = data.get('data', {})
-            replies = reply_data.get('replies', [])
-            
+            reply_data = data.get('data') or {}
+            replies = reply_data.get('replies') or []
             for reply in replies:
                 if 'member' in reply and 'content' in reply:
                     member = reply['member']
@@ -392,108 +284,49 @@ def fetch_dynamic_comments(dynamic_id, header, next_offset=0):
                         'message': content.get('message', ''),
                         'ctime': reply.get('ctime', 0)
                     })
-            
-            page_info = reply_data.get('page', {})
+            page_info = reply_data.get('page') or {}
             current_page = page_info.get('pn', page)
             total_count = page_info.get('count', 0)
             page_size = page_info.get('size', 20)
-            
             has_more = current_page * page_size < total_count
             new_next_offset = current_page + 1 if has_more else 0
-            
-            print(f"成功获取到 {len(comments)} 条评论 (第{current_page}页, 共{total_count}条)")
-        else:
-            print(f"获取评论失败: {data.get('message', '未知错误')}")
-            
     except Exception as e:
         print(f"请求动态 {dynamic_id} 评论时出错: {e}")
-    
-    return {
-        'comments': comments,
-        'next_offset': new_next_offset,
-        'has_more': has_more
-    }
+    return {'comments': comments, 'next_offset': new_next_offset, 'has_more': has_more}
 
 
 def fetch_all_dynamic_comments(dynamic_id, header):
-    """
-    获取动态的所有评论。
-    
-    Args:
-        dynamic_id: 动态ID
-        header: 请求头
-        
-    Returns:
-        [{
-            'rpid': 评论ID,
-            'mid': 用户MID,
-            'uname': 用户名,
-            'message': 评论内容,
-            'ctime': 发布时间
-        }, ...]
-    """
+    """获取动态的所有评论。"""
     all_comments = []
     next_offset = 0
-    
     while True:
         result = fetch_dynamic_comments(dynamic_id, header, next_offset)
         all_comments.extend(result['comments'])
-        
-        if not result['has_more'] or len(result['comments']) == 0:
-            break
-            
+        if not result['has_more'] or len(result['comments']) == 0: break
         next_offset = result['next_offset']
-        time.sleep(0.5)  # 避免请求过快
-    
+        time.sleep(0.5)
     return all_comments
 
+
 def get_followed_feed(header, limit=20):
-    """
-    获取当前登录账号关注者的动态流（Feed All）。
-    包含充电专属动态，比空间接口更全面。
-    
-    Args:
-        header: 请求头
-        limit: 限制数量
-        
-    Returns:
-        [{
-            'mid': 发布者ID,
-            'uname': 发布者名字,
-            'dynamic_id': 动态ID,
-            'type': 动态类型,
-            'content': 内容,
-            'timestamp': 时间戳,
-            'is_exclusive': 是否专属
-        }, ...]
-    """
+    """获取当前登录账号关注者的动态流（Feed All）。"""
     url = "https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/all"
-    
     type_map = {
-        'DYNAMIC_TYPE_AV': 8,
-        'DYNAMIC_TYPE_DRAW': 2,
-        'DYNAMIC_TYPE_WORD': 4,
-        'DYNAMIC_TYPE_FORWARD': 1,
-        'DYNAMIC_TYPE_ARTICLE': 64,
-        'DYNAMIC_TYPE_COMMON_VERTICAL': 2,
-        'DYNAMIC_TYPE_MEDIALIST': 8,
+        'DYNAMIC_TYPE_AV': 8, 'DYNAMIC_TYPE_DRAW': 2, 'DYNAMIC_TYPE_WORD': 4,
+        'DYNAMIC_TYPE_FORWARD': 1, 'DYNAMIC_TYPE_ARTICLE': 64,
+        'DYNAMIC_TYPE_COMMON_VERTICAL': 2, 'DYNAMIC_TYPE_MEDIALIST': 8,
     }
-    
     results = []
     try:
         resp = requests.get(url, headers=header, timeout=10)
-        resp.raise_for_status()
         data = resp.json()
-        
         if data.get('code') == 0:
             items = data.get('data', {}).get('items', [])
             for item in items[:limit]:
                 modules = item.get('modules', {})
                 author = modules.get('module_author', {})
-                
                 type_str = item.get('type', '')
                 dynamic_type = type_map.get(type_str, 0)
-                
                 m_dyn = modules.get('module_dynamic', {})
                 content = ''
                 if m_dyn:
@@ -501,9 +334,8 @@ def get_followed_feed(header, limit=20):
                         content = m_dyn['desc']['text']
                     elif m_dyn.get('major') and m_dyn['major'].get('opus') and m_dyn['major']['opus'].get('summary'):
                         content = m_dyn['major']['opus']['summary'].get('text', '')
-                
                 is_exclusive = item.get('basic', {}).get('is_only_fans', False)
-                
+                basic = item.get('basic', {})
                 results.append({
                     'mid': str(author.get('mid', '')),
                     'uname': author.get('name', ''),
@@ -511,9 +343,10 @@ def get_followed_feed(header, limit=20):
                     'type': dynamic_type,
                     'content': content,
                     'timestamp': author.get('pub_ts', 0),
-                    'is_exclusive': is_exclusive
+                    'is_exclusive': is_exclusive,
+                    'comment_oid': basic.get('comment_id_str'),
+                    'comment_type': basic.get('comment_type')
                 })
     except Exception as e:
         print(f"获取关注动态流失败: {e}")
-        
     return results

@@ -184,24 +184,26 @@ def update_user_latest_dynamic(mid, uname, header, dynamics=None):
         if not valid_dynamics:
             return []
         
-        latest_two = valid_dynamics[:2]
+        latest_five = valid_dynamics[:5]
         
         existing_dynamic_ids = {d[0] for d in db.get_user_monitored_dynamics(mid)}
         
         old_dynamics = db.get_user_monitored_dynamics(mid)
-        new_dynamic_ids = {d['dynamic_id'] for d in latest_two}
+        new_dynamic_ids = {d['dynamic_id'] for d in latest_five}
         
-        # 移除不在前两条中的老动态
+        # 移除不在前五条中的老动态
         for old_dynamic in old_dynamics:
             old_dynamic_id = old_dynamic[0]
             if old_dynamic_id not in new_dynamic_ids:
                 db.remove_monitored_dynamic(old_dynamic_id)
                 log(f"[移除] 用户 [{uname}] 的老动态 ID: {old_dynamic_id}")
         
-        for dynamic in latest_two:
+        for dynamic in latest_five:
             new_dynamic_id = dynamic['dynamic_id']
             new_content = dynamic['content'] or '[无内容]'
             new_dynamic_type = dynamic['type']
+            new_comment_oid = dynamic.get('comment_oid')
+            new_comment_type = dynamic.get('comment_type')
             
             # 检查是否为充电专属
             is_exclusive = dynamic.get('is_exclusive', False)
@@ -211,7 +213,8 @@ def update_user_latest_dynamic(mid, uname, header, dynamics=None):
             if new_dynamic_id in existing_dynamic_ids:
                 continue
             
-            if db.add_monitored_dynamic(new_dynamic_id, mid, new_content, new_dynamic_type):
+            if db.add_monitored_dynamic(new_dynamic_id, mid, new_content, new_dynamic_type, 
+                                      comment_oid=new_comment_oid, comment_type=new_comment_type):
                 log(f"[添加] 用户 [{uname}] 的新动态: {type_name} - {new_content[:40]}...")
                 added_dynamics.append((new_dynamic_id, new_content, new_dynamic_type, type_name, dynamic['timestamp']))
         
@@ -221,7 +224,7 @@ def update_user_latest_dynamic(mid, uname, header, dynamics=None):
         return []
 
 
-def check_dynamic_comments(dynamic_id, mid, content, header, seen_ids):
+def check_dynamic_comments(dynamic_id, mid, content, header, seen_ids, oid=None, comment_type=None):
     """
     检查单个动态的评论
     只监控动态作者(发布者)自己的评论
@@ -229,7 +232,8 @@ def check_dynamic_comments(dynamic_id, mid, content, header, seen_ids):
     new_comments_found = []
     
     try:
-        result = user_monitor.fetch_dynamic_comments(dynamic_id, header)
+        # 优先使用数据库中的 oid 和 comment_type
+        result = user_monitor.fetch_dynamic_comments(dynamic_id, header, oid=oid, comment_type=comment_type)
         comments = result.get('comments', [])
         has_more = result.get('has_more', False)
         
@@ -377,12 +381,14 @@ def auto_monitor():
     monitored_dynamics = db.get_monitored_dynamics()
     if monitored_dynamics:
         log(f"[动态] 共 {len(monitored_dynamics)} 个动态在监控中")
-        for dynamic_id, mid, content, dynamic_type, added_at, uname in monitored_dynamics:
+        for dynamic_id, mid, content, dynamic_type, added_at, uname, comment_oid, comment_type in monitored_dynamics:
             dynamic_targets[dynamic_id] = {
                 "mid": mid,
                 "content": content[:50] if content else '[无内容]',
                 "uname": uname,
-                "seen_ids": db.load_seen_dynamic_comments(dynamic_id)
+                "seen_ids": db.load_seen_dynamic_comments(dynamic_id),
+                "comment_oid": comment_oid,
+                "comment_type": comment_type
             }
     
     # 开始监控循环
@@ -444,13 +450,15 @@ def auto_monitor():
             current_dynamic_ids = {d[0] for d in current_dynamics}
             
             # 添加新动态到监控
-            for dynamic_id, mid, content, dynamic_type, added_at, uname in current_dynamics:
+            for dynamic_id, mid, content, dynamic_type, added_at, uname, comment_oid, comment_type in current_dynamics:
                 if dynamic_id not in dynamic_targets:
                     dynamic_targets[dynamic_id] = {
                         "mid": mid,
                         "content": content[:50] if content else '[无内容]',
                         "uname": uname,
-                        "seen_ids": db.load_seen_dynamic_comments(dynamic_id)
+                        "seen_ids": db.load_seen_dynamic_comments(dynamic_id),
+                        "comment_oid": comment_oid,
+                        "comment_type": comment_type
                     }
                     log(f"[动态] 新动态加入监控: {uname} - {content[:30]}...")
             
@@ -495,7 +503,9 @@ def auto_monitor():
                 
                 try:
                     has_new, new_comments = check_dynamic_comments(
-                        dynamic_id, mid, content, header, seen_ids
+                        dynamic_id, mid, content, header, seen_ids,
+                        oid=data.get('comment_oid'), 
+                        comment_type=data.get('comment_type')
                     )
                     
                     if has_new:

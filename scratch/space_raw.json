@@ -1,0 +1,788 @@
+{
+  "code": 0,
+  "message": "0",
+  "data": {
+    "update_num": "0",
+    "update_baseline": "",
+    "offset": "",
+    "has_more": false,
+    "total": "0",
+    "items": [
+      {
+        "id_str": "1201745576146763793",
+        "type": "DYNAMIC_TYPE_ARTICLE",
+        "basic": {
+          "rid_str": "48970279",
+          "comment_type": 12,
+          "comment_id_str": "48970279",
+          "like_icon": {
+            "id": "0",
+            "start_url": "",
+            "action_url": "",
+            "end_url": ""
+          },
+          "in_audit": false,
+          "is_only_fans": false,
+          "editable": false,
+          "open_app_extra": "",
+          "jump_url": "",
+          "aigc": false
+        },
+        "visible": true,
+        "modules": {
+          "module_tag": null,
+          "module_author": {
+            "type": "AUTHOR_TYPE_NORMAL",
+            "avatar": {
+              "container_size": {
+                "width": 1.35,
+                "height": 1.35
+              },
+              "layers": [],
+              "fallback_layers": {
+                "group_id": "",
+                "layers": [
+                  {
+                    "layer_id": "",
+                    "visible": true,
+                    "general_spec": {
+                      "pos_spec": {
+                        "coordinate_pos": 2,
+                        "axis_x": 0.675,
+                        "axis_y": 0.675
+                      },
+                      "size_spec": {
+                        "width": 1,
+                        "height": 1
+                      },
+                      "render_spec": {
+                        "opacity": 1
+                      }
+                    },
+                    "layer_config": {
+                      "tags": {
+                        "AVATAR_LAYER": {
+                          "config_type": 0
+                        }
+                      },
+                      "is_critical": true,
+                      "allow_over_paint": false,
+                      "layer_mask": {
+                        "general_spec": {
+                          "pos_spec": {
+                            "coordinate_pos": 2,
+                            "axis_x": 0.675,
+                            "axis_y": 0.675
+                          },
+                          "size_spec": {
+                            "width": 1,
+                            "height": 1
+                          },
+                          "render_spec": {
+                            "opacity": 1
+                          }
+                        },
+                        "mask_src": {
+                          "src_type": 3,
+                          "placeholder": 0,
+                          "draw": {
+                            "draw_type": 1,
+                            "fill_mode": 1,
+                            "color_config": {
+                              "is_dark_mode_aware": false,
+                              "day": {
+                                "argb": "#FF000000"
+                              },
+                              "night": null
+                            },
+                            "edge_weight": 0
+                          }
+                        }
+                      }
+                    },
+                    "resource": {
+                      "res_type": 3,
+                      "res_image": {
+                        "image_src": {
+                          "src_type": 1,
+                          "placeholder": 6,
+                          "remote": {
+                            "url": "https://i0.hdslb.com/bfs/face/f2501f1bf618f2cf7e1b2142ea63b9cc74fe2f77.jpg",
+                            "bfs_style": "widget-layer-avatar"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ],
+                "group_mask": null,
+                "is_critical_group": true
+              },
+              "mid": "349490448"
+            },
+            "face": "https://i0.hdslb.com/bfs/face/f2501f1bf618f2cf7e1b2142ea63b9cc74fe2f77.jpg",
+            "face_nft": false,
+            "nft_info": null,
+            "name": "橘子皮要厚",
+            "name_render": null,
+            "label": "",
+            "mid": 349490448,
+            "jump_url": "//space.bilibili.com/349490448/dynamic",
+            "following": false,
+            "pub_ts": "1778641596",
+            "pub_time": "1小时前",
+            "pub_action": "投稿了文章",
+            "pub_location_text": "",
+            "pendant": {
+              "pid": 0,
+              "name": "",
+              "image": "",
+              "expire": "0",
+              "image_enhance": "",
+              "image_enhance_frame": "",
+              "n_pid": "0"
+            },
+            "vip": {
+              "type": 0,
+              "status": 0,
+              "due_date": "0",
+              "vip_pay_type": 0,
+              "theme_type": 0,
+              "label": {
+                "path": "",
+                "text": "",
+                "label_theme": "",
+                "text_color": "",
+                "bg_style": 0,
+                "bg_color": "",
+                "border_color": "",
+                "use_img_label": true,
+                "img_label_uri_hans": "",
+                "img_label_uri_hant": "",
+                "img_label_uri_hans_static": "https://i0.hdslb.com/bfs/vip/d7b702ef65a976b20ed854cbd04cb9e27341bb79.png",
+                "img_label_uri_hant_static": "https://i0.hdslb.com/bfs/activity-plat/static/20220614/e369244d0b14644f5e1a06431e22a4d5/KJunwh19T5.png"
+              },
+              "avatar_subscript": 0,
+              "nickname_color": "",
+              "role": "0",
+              "avatar_subscript_url": "",
+              "tv_vip_status": 0,
+              "tv_vip_pay_type": 0,
+              "tv_due_date": "0",
+              "avatar_icon": {
+                "icon_type": 0,
+                "icon_resource": {
+                  "type": 0,
+                  "url": ""
+                }
+              }
+            },
+            "official_verify": {
+              "type": -1,
+              "desc": ""
+            },
+            "decorate": null,
+            "decoration_card": null,
+            "is_top": false,
+            "icon_badge": null
+          },
+          "module_more": {
+            "rcmd_text": "",
+            "three_point_items": [
+              {
+                "label": "举报",
+                "type": "THREE_POINT_REPORT",
+                "params": {},
+                "modal": null,
+                "jump_url": ""
+              }
+            ]
+          },
+          "module_dispute": null,
+          "module_dynamic": {
+            "topic": null,
+            "desc": null,
+            "major": {
+              "type": "MAJOR_TYPE_ARTICLE",
+              "none": null,
+              "blocked": null,
+              "archive": null,
+              "pgc": null,
+              "courses": null,
+              "draw": null,
+              "article": {
+                "id": "48970279",
+                "jump_url": "//www.bilibili.com/read/cv48970279/",
+                "title": "这是第一条动态图文",
+                "desc": "啊啊打法",
+                "covers": [
+                  "https://i0.hdslb.com/bfs/new_dyn/banner/57e9b03c38f4e21e721c57f82eacbb15349490448.png"
+                ],
+                "label": "2阅读"
+              },
+              "music": null,
+              "common": null,
+              "upower_common": null,
+              "live": null,
+              "live_rcmd": null,
+              "medialist": null,
+              "subscription": null,
+              "ugc_season": null,
+              "subscription_new": null,
+              "opus": null
+            },
+            "additional": null
+          },
+          "module_extend": null,
+          "module_stat": {
+            "forward": {
+              "status": false,
+              "count": 0,
+              "forbidden": false,
+              "disabled": false,
+              "silent": false,
+              "hidden": false
+            },
+            "comment": {
+              "status": false,
+              "count": 1,
+              "forbidden": false,
+              "disabled": false,
+              "silent": false,
+              "hidden": false
+            },
+            "like": {
+              "status": false,
+              "count": 0,
+              "forbidden": false,
+              "disabled": false,
+              "silent": false,
+              "hidden": false
+            }
+          },
+          "module_interaction": null,
+          "module_share_info": null,
+          "module_fold": null
+        },
+        "orig": null
+      },
+      {
+        "id_str": "1201418166527328279",
+        "type": "DYNAMIC_TYPE_ARTICLE",
+        "basic": {
+          "rid_str": "48924005",
+          "comment_type": 12,
+          "comment_id_str": "48924005",
+          "like_icon": {
+            "id": "0",
+            "start_url": "",
+            "action_url": "",
+            "end_url": ""
+          },
+          "in_audit": false,
+          "is_only_fans": false,
+          "editable": false,
+          "open_app_extra": "",
+          "jump_url": "",
+          "aigc": false
+        },
+        "visible": true,
+        "modules": {
+          "module_tag": null,
+          "module_author": {
+            "type": "AUTHOR_TYPE_NORMAL",
+            "avatar": {
+              "container_size": {
+                "width": 1.35,
+                "height": 1.35
+              },
+              "layers": [],
+              "fallback_layers": {
+                "group_id": "",
+                "layers": [
+                  {
+                    "layer_id": "",
+                    "visible": true,
+                    "general_spec": {
+                      "pos_spec": {
+                        "coordinate_pos": 2,
+                        "axis_x": 0.675,
+                        "axis_y": 0.675
+                      },
+                      "size_spec": {
+                        "width": 1,
+                        "height": 1
+                      },
+                      "render_spec": {
+                        "opacity": 1
+                      }
+                    },
+                    "layer_config": {
+                      "tags": {
+                        "AVATAR_LAYER": {
+                          "config_type": 0
+                        }
+                      },
+                      "is_critical": true,
+                      "allow_over_paint": false,
+                      "layer_mask": {
+                        "general_spec": {
+                          "pos_spec": {
+                            "coordinate_pos": 2,
+                            "axis_x": 0.675,
+                            "axis_y": 0.675
+                          },
+                          "size_spec": {
+                            "width": 1,
+                            "height": 1
+                          },
+                          "render_spec": {
+                            "opacity": 1
+                          }
+                        },
+                        "mask_src": {
+                          "src_type": 3,
+                          "placeholder": 0,
+                          "draw": {
+                            "draw_type": 1,
+                            "fill_mode": 1,
+                            "color_config": {
+                              "is_dark_mode_aware": false,
+                              "day": {
+                                "argb": "#FF000000"
+                              },
+                              "night": null
+                            },
+                            "edge_weight": 0
+                          }
+                        }
+                      }
+                    },
+                    "resource": {
+                      "res_type": 3,
+                      "res_image": {
+                        "image_src": {
+                          "src_type": 1,
+                          "placeholder": 6,
+                          "remote": {
+                            "url": "https://i0.hdslb.com/bfs/face/f2501f1bf618f2cf7e1b2142ea63b9cc74fe2f77.jpg",
+                            "bfs_style": "widget-layer-avatar"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ],
+                "group_mask": null,
+                "is_critical_group": true
+              },
+              "mid": "349490448"
+            },
+            "face": "https://i0.hdslb.com/bfs/face/f2501f1bf618f2cf7e1b2142ea63b9cc74fe2f77.jpg",
+            "face_nft": false,
+            "nft_info": null,
+            "name": "橘子皮要厚",
+            "name_render": null,
+            "label": "",
+            "mid": 349490448,
+            "jump_url": "//space.bilibili.com/349490448/dynamic",
+            "following": false,
+            "pub_ts": "1778565365",
+            "pub_time": "昨天 13:56",
+            "pub_action": "投稿了文章",
+            "pub_location_text": "",
+            "pendant": {
+              "pid": 0,
+              "name": "",
+              "image": "",
+              "expire": "0",
+              "image_enhance": "",
+              "image_enhance_frame": "",
+              "n_pid": "0"
+            },
+            "vip": {
+              "type": 0,
+              "status": 0,
+              "due_date": "0",
+              "vip_pay_type": 0,
+              "theme_type": 0,
+              "label": {
+                "path": "",
+                "text": "",
+                "label_theme": "",
+                "text_color": "",
+                "bg_style": 0,
+                "bg_color": "",
+                "border_color": "",
+                "use_img_label": true,
+                "img_label_uri_hans": "",
+                "img_label_uri_hant": "",
+                "img_label_uri_hans_static": "https://i0.hdslb.com/bfs/vip/d7b702ef65a976b20ed854cbd04cb9e27341bb79.png",
+                "img_label_uri_hant_static": "https://i0.hdslb.com/bfs/activity-plat/static/20220614/e369244d0b14644f5e1a06431e22a4d5/KJunwh19T5.png"
+              },
+              "avatar_subscript": 0,
+              "nickname_color": "",
+              "role": "0",
+              "avatar_subscript_url": "",
+              "tv_vip_status": 0,
+              "tv_vip_pay_type": 0,
+              "tv_due_date": "0",
+              "avatar_icon": {
+                "icon_type": 0,
+                "icon_resource": {
+                  "type": 0,
+                  "url": ""
+                }
+              }
+            },
+            "official_verify": {
+              "type": -1,
+              "desc": ""
+            },
+            "decorate": null,
+            "decoration_card": null,
+            "is_top": false,
+            "icon_badge": null
+          },
+          "module_more": {
+            "rcmd_text": "",
+            "three_point_items": [
+              {
+                "label": "举报",
+                "type": "THREE_POINT_REPORT",
+                "params": {},
+                "modal": null,
+                "jump_url": ""
+              }
+            ]
+          },
+          "module_dispute": null,
+          "module_dynamic": {
+            "topic": null,
+            "desc": null,
+            "major": {
+              "type": "MAJOR_TYPE_ARTICLE",
+              "none": null,
+              "blocked": null,
+              "archive": null,
+              "pgc": null,
+              "courses": null,
+              "draw": null,
+              "article": {
+                "id": "48924005",
+                "jump_url": "//www.bilibili.com/read/cv48924005/",
+                "title": "111111111111111",
+                "desc": "111111111111111111111",
+                "covers": [
+                  "https://i0.hdslb.com/bfs/new_dyn/banner/30f66cc084ae595d39de7b804bd3587a349490448.png"
+                ],
+                "label": "0阅读"
+              },
+              "music": null,
+              "common": null,
+              "upower_common": null,
+              "live": null,
+              "live_rcmd": null,
+              "medialist": null,
+              "subscription": null,
+              "ugc_season": null,
+              "subscription_new": null,
+              "opus": null
+            },
+            "additional": null
+          },
+          "module_extend": null,
+          "module_stat": {
+            "forward": {
+              "status": false,
+              "count": 0,
+              "forbidden": false,
+              "disabled": false,
+              "silent": false,
+              "hidden": false
+            },
+            "comment": {
+              "status": false,
+              "count": 0,
+              "forbidden": false,
+              "disabled": false,
+              "silent": false,
+              "hidden": false
+            },
+            "like": {
+              "status": false,
+              "count": 0,
+              "forbidden": false,
+              "disabled": false,
+              "silent": false,
+              "hidden": false
+            }
+          },
+          "module_interaction": null,
+          "module_share_info": null,
+          "module_fold": null
+        },
+        "orig": null
+      },
+      {
+        "id_str": "1200007123716538408",
+        "type": "DYNAMIC_TYPE_ARTICLE",
+        "basic": {
+          "rid_str": "48745498",
+          "comment_type": 12,
+          "comment_id_str": "48745498",
+          "like_icon": {
+            "id": "0",
+            "start_url": "",
+            "action_url": "",
+            "end_url": ""
+          },
+          "in_audit": false,
+          "is_only_fans": false,
+          "editable": false,
+          "open_app_extra": "",
+          "jump_url": "",
+          "aigc": false
+        },
+        "visible": true,
+        "modules": {
+          "module_tag": null,
+          "module_author": {
+            "type": "AUTHOR_TYPE_NORMAL",
+            "avatar": {
+              "container_size": {
+                "width": 1.35,
+                "height": 1.35
+              },
+              "layers": [],
+              "fallback_layers": {
+                "group_id": "",
+                "layers": [
+                  {
+                    "layer_id": "",
+                    "visible": true,
+                    "general_spec": {
+                      "pos_spec": {
+                        "coordinate_pos": 2,
+                        "axis_x": 0.675,
+                        "axis_y": 0.675
+                      },
+                      "size_spec": {
+                        "width": 1,
+                        "height": 1
+                      },
+                      "render_spec": {
+                        "opacity": 1
+                      }
+                    },
+                    "layer_config": {
+                      "tags": {
+                        "AVATAR_LAYER": {
+                          "config_type": 0
+                        }
+                      },
+                      "is_critical": true,
+                      "allow_over_paint": false,
+                      "layer_mask": {
+                        "general_spec": {
+                          "pos_spec": {
+                            "coordinate_pos": 2,
+                            "axis_x": 0.675,
+                            "axis_y": 0.675
+                          },
+                          "size_spec": {
+                            "width": 1,
+                            "height": 1
+                          },
+                          "render_spec": {
+                            "opacity": 1
+                          }
+                        },
+                        "mask_src": {
+                          "src_type": 3,
+                          "placeholder": 0,
+                          "draw": {
+                            "draw_type": 1,
+                            "fill_mode": 1,
+                            "color_config": {
+                              "is_dark_mode_aware": false,
+                              "day": {
+                                "argb": "#FF000000"
+                              },
+                              "night": null
+                            },
+                            "edge_weight": 0
+                          }
+                        }
+                      }
+                    },
+                    "resource": {
+                      "res_type": 3,
+                      "res_image": {
+                        "image_src": {
+                          "src_type": 1,
+                          "placeholder": 6,
+                          "remote": {
+                            "url": "https://i0.hdslb.com/bfs/face/f2501f1bf618f2cf7e1b2142ea63b9cc74fe2f77.jpg",
+                            "bfs_style": "widget-layer-avatar"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ],
+                "group_mask": null,
+                "is_critical_group": true
+              },
+              "mid": "349490448"
+            },
+            "face": "https://i0.hdslb.com/bfs/face/f2501f1bf618f2cf7e1b2142ea63b9cc74fe2f77.jpg",
+            "face_nft": false,
+            "nft_info": null,
+            "name": "橘子皮要厚",
+            "name_render": null,
+            "label": "",
+            "mid": 349490448,
+            "jump_url": "//space.bilibili.com/349490448/dynamic",
+            "following": false,
+            "pub_ts": "1778236831",
+            "pub_time": "05月08日",
+            "pub_action": "投稿了文章",
+            "pub_location_text": "",
+            "pendant": {
+              "pid": 0,
+              "name": "",
+              "image": "",
+              "expire": "0",
+              "image_enhance": "",
+              "image_enhance_frame": "",
+              "n_pid": "0"
+            },
+            "vip": {
+              "type": 0,
+              "status": 0,
+              "due_date": "0",
+              "vip_pay_type": 0,
+              "theme_type": 0,
+              "label": {
+                "path": "",
+                "text": "",
+                "label_theme": "",
+                "text_color": "",
+                "bg_style": 0,
+                "bg_color": "",
+                "border_color": "",
+                "use_img_label": true,
+                "img_label_uri_hans": "",
+                "img_label_uri_hant": "",
+                "img_label_uri_hans_static": "https://i0.hdslb.com/bfs/vip/d7b702ef65a976b20ed854cbd04cb9e27341bb79.png",
+                "img_label_uri_hant_static": "https://i0.hdslb.com/bfs/activity-plat/static/20220614/e369244d0b14644f5e1a06431e22a4d5/KJunwh19T5.png"
+              },
+              "avatar_subscript": 0,
+              "nickname_color": "",
+              "role": "0",
+              "avatar_subscript_url": "",
+              "tv_vip_status": 0,
+              "tv_vip_pay_type": 0,
+              "tv_due_date": "0",
+              "avatar_icon": {
+                "icon_type": 0,
+                "icon_resource": {
+                  "type": 0,
+                  "url": ""
+                }
+              }
+            },
+            "official_verify": {
+              "type": -1,
+              "desc": ""
+            },
+            "decorate": null,
+            "decoration_card": null,
+            "is_top": false,
+            "icon_badge": null
+          },
+          "module_more": {
+            "rcmd_text": "",
+            "three_point_items": [
+              {
+                "label": "举报",
+                "type": "THREE_POINT_REPORT",
+                "params": {},
+                "modal": null,
+                "jump_url": ""
+              }
+            ]
+          },
+          "module_dispute": null,
+          "module_dynamic": {
+            "topic": null,
+            "desc": null,
+            "major": {
+              "type": "MAJOR_TYPE_ARTICLE",
+              "none": null,
+              "blocked": null,
+              "archive": null,
+              "pgc": null,
+              "courses": null,
+              "draw": null,
+              "article": {
+                "id": "48745498",
+                "jump_url": "//www.bilibili.com/read/cv48745498/",
+                "title": "1111111111111",
+                "desc": "11111111111111",
+                "covers": [
+                  "https://i0.hdslb.com/bfs/new_dyn/banner/e8bfe1dce825fb7a49a8c5e37c2eafc2349490448.png"
+                ],
+                "label": "0阅读"
+              },
+              "music": null,
+              "common": null,
+              "upower_common": null,
+              "live": null,
+              "live_rcmd": null,
+              "medialist": null,
+              "subscription": null,
+              "ugc_season": null,
+              "subscription_new": null,
+              "opus": null
+            },
+            "additional": null
+          },
+          "module_extend": null,
+          "module_stat": {
+            "forward": {
+              "status": false,
+              "count": 0,
+              "forbidden": false,
+              "disabled": false,
+              "silent": false,
+              "hidden": false
+            },
+            "comment": {
+              "status": false,
+              "count": 1,
+              "forbidden": false,
+              "disabled": false,
+              "silent": false,
+              "hidden": false
+            },
+            "like": {
+              "status": false,
+              "count": 0,
+              "forbidden": false,
+              "disabled": false,
+              "silent": false,
+              "hidden": false
+            }
+          },
+          "module_interaction": null,
+          "module_share_info": null,
+          "module_fold": null
+        },
+        "orig": null
+      }
+    ]
+  },
+  "ttl": 1
+}

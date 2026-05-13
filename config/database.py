@@ -68,10 +68,21 @@ def init_db():
             mid TEXT NOT NULL,
             content TEXT,
             dynamic_type INTEGER DEFAULT 0,
+            comment_oid TEXT,
+            comment_type INTEGER,
             added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (mid) REFERENCES monitored_users (mid) ON DELETE CASCADE
         )
         ''')
+        
+        # 數據庫遷移：為 monitored_dynamics 添加新列
+        try:
+            cursor.execute('SELECT comment_oid FROM monitored_dynamics LIMIT 1')
+        except sqlite3.OperationalError:
+            cursor.execute('ALTER TABLE monitored_dynamics ADD COLUMN comment_oid TEXT')
+            cursor.execute('ALTER TABLE monitored_dynamics ADD COLUMN comment_type INTEGER')
+            conn.commit()
+            print("[數據庫] 已為 monitored_dynamics 添加評論相關列")
         
         # 創建已見動態評論表格
         cursor.execute('''
@@ -344,15 +355,16 @@ def get_user_dynamic_videos(mid):
 
 # --- 動態（圖文）監控相關函數 ---
 
-def add_monitored_dynamic(dynamic_id, mid, content='', dynamic_type=0):
-    """添加一個動態到監控列表。"""
+def add_monitored_dynamic(dynamic_id, mid, content, dynamic_type, comment_oid, comment_type):
+    """添加一個監控動態到數據庫。"""
     try:
         with sqlite3.connect(DB_NAME) as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT OR IGNORE INTO monitored_dynamics (dynamic_id, mid, content, dynamic_type) 
-                VALUES (?, ?, ?, ?)
-            ''', (dynamic_id, mid, content, dynamic_type))
+                INSERT OR IGNORE INTO monitored_dynamics 
+                (dynamic_id, mid, content, dynamic_type, comment_oid, comment_type) 
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (dynamic_id, mid, content, dynamic_type, comment_oid, comment_type))
             conn.commit()
             return cursor.rowcount > 0
     except Exception as e:
@@ -375,7 +387,7 @@ def get_monitored_dynamics():
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT d.dynamic_id, d.mid, d.content, d.dynamic_type, d.added_at, u.uname
+            SELECT d.dynamic_id, d.mid, d.content, d.dynamic_type, d.added_at, u.uname, d.comment_oid, d.comment_type
             FROM monitored_dynamics d
             JOIN monitored_users u ON d.mid = u.mid
             ORDER BY d.added_at DESC
@@ -386,7 +398,7 @@ def get_user_monitored_dynamics(mid):
     """獲取指定用戶的所有監控動態。"""
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        cursor.execute('SELECT dynamic_id, content, dynamic_type FROM monitored_dynamics WHERE mid = ?', (mid,))
+        cursor.execute('SELECT dynamic_id, content, dynamic_type, comment_oid, comment_type FROM monitored_dynamics WHERE mid = ?', (mid,))
         return cursor.fetchall()
 
 def add_dynamic_comment_to_db(rpid, dynamic_id):
