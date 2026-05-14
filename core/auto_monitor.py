@@ -257,7 +257,10 @@ def check_dynamic_comments(dynamic_id, mid, content, header, seen_ids, oid=None,
                 from datetime import datetime
                 import pandas as pd
                 
-                comment_time = datetime.fromtimestamp(comment["ctime"]).strftime('%Y-%m-%d %H:%M:%S')
+                try:
+                    comment_time = datetime.fromtimestamp(int(comment["ctime"])).strftime('%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError):
+                    comment_time = str(comment["ctime"])
                 
                 new_comments_found.append({
                     "user": comment['uname'],
@@ -393,11 +396,17 @@ def auto_monitor():
     
     # 开始监控循环
     loop_count = 0
-    try:
-        while True:
+    while True:
+        try:
             loop_count += 1
             log(f"\n第 {loop_count} 轮监控开始")
             
+            # 每轮都尝试获取/更新请求头，以防过期
+            try:
+                header = get_header()
+            except Exception as e:
+                log(f"[警告] 更新请求头失败: {e}，将使用旧请求头尝试...")
+
             # 每轮都重新获取启用了动态监控的用户列表
             dynamic_users = db.get_dynamic_monitored_user_mids()
             if dynamic_users:
@@ -405,25 +414,35 @@ def auto_monitor():
                 
                 # 获取并显示用户名
                 for mid in list(dynamic_users.keys()):
-                    uname, _ = user_monitor.get_user_info(mid, header)
-                    if uname:
-                        dynamic_users[mid] = uname
+                    try:
+                        uname, _ = user_monitor.get_user_info(mid, header)
+                        if uname:
+                            dynamic_users[mid] = uname
+                    except:
+                        pass
             
             # 每轮都检查用户是否有新动态
             if dynamic_users:
                 # 1. 优先获取关注流（能抓到充电动态）
                 log("[动态] 正在从关注流中预取动态...")
-                followed_dynamics = user_monitor.get_followed_feed(header)
+                try:
+                    followed_dynamics = user_monitor.get_followed_feed(header)
+                except Exception as e:
+                    log(f"[警告] 预取动态流失败: {e}")
+                    followed_dynamics = []
                 
                 for mid, uname in dynamic_users.items():
-                    # 尝试更新动态，传入预取的关注流数据
-                    added = update_user_latest_dynamic(mid, uname, header, dynamics=followed_dynamics)
-                    if added:
-                        for dynamic_id, content, dynamic_type, type_name, pub_ts in added:
-                            log(f"[通知] 发现新动态: {type_name} - {content[:40]}...")
-                            if webhook_enabled:
-                                notifier.send_new_dynamic_notification(uname, type_name, content, pub_ts)
-                        time.sleep(0.3)
+                    try:
+                        # 尝试更新动态，传入预取的关注流数据
+                        added = update_user_latest_dynamic(mid, uname, header, dynamics=followed_dynamics)
+                        if added:
+                            for dynamic_id, content, dynamic_type, type_name, pub_ts in added:
+                                log(f"[通知] 发现新动态: {type_name} - {content[:40]}...")
+                                if webhook_enabled:
+                                    notifier.send_new_dynamic_notification(uname, type_name, content, pub_ts)
+                            time.sleep(0.3)
+                    except Exception as e:
+                        log(f"更新用户 {uname} 动态时出错: {e}")
             
             # 重新获取视频列表（可能有新视频）
             current_videos = db.get_monitored_videos()
@@ -469,7 +488,6 @@ def auto_monitor():
                 del dynamic_targets[did]
             
             # 检查视频评论
-            round_new = 0
             for oid, data in video_targets.items():
                 title = data['title']
                 seen_ids = data['seen_ids']
@@ -537,11 +555,14 @@ def auto_monitor():
             log(f"第 {loop_count} 轮监控完成，{interval}秒后继续...")
             time.sleep(interval)
             
-    except KeyboardInterrupt:
-        log("\n监控已停止")
-    except Exception as e:
-        log(f"监控出错: {e}")
-        raise
+        except KeyboardInterrupt:
+            log("\n监控已手动停止")
+            break
+        except Exception as e:
+            log(f"本轮监控发生异常: {e}")
+            log("等待 60 秒后尝试下一轮...")
+            time.sleep(60)
+
 
 if __name__ == "__main__":
     auto_monitor()

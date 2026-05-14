@@ -95,7 +95,10 @@ def send_new_dynamic_notification(uname, dynamic_type, content, pub_ts=None):
 
     import datetime
     if pub_ts:
-        display_time = datetime.datetime.fromtimestamp(pub_ts).strftime('%Y-%m-%d %H:%M:%S')
+        try:
+            display_time = datetime.datetime.fromtimestamp(int(pub_ts)).strftime('%Y-%m-%d %H:%M:%S')
+        except (ValueError, TypeError):
+            display_time = str(pub_ts)
     else:
         display_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
