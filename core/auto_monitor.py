@@ -29,7 +29,7 @@ def log(message):
     with open('bilibili_monitor.log', 'a', encoding='utf-8') as f:
         f.write(log_line + '\n')
 
-def check_video_comments(oid, bv_id, title, header, seen_ids, owner_mid=None):
+def check_video_comments(oid, bv_id, title, header, seen_ids, owner_mid=None, min_ctime=None):
     """
     检查单个视频的评论
     只监控视频作者(owner_mid)自己的评论
@@ -53,7 +53,7 @@ def check_video_comments(oid, bv_id, title, header, seen_ids, owner_mid=None):
                     db.add_comment_to_db(rpid, oid)
                 continue
             
-            new_main_comment = process_and_notify_comment(comment, oid, seen_ids)
+            new_main_comment = process_and_notify_comment(comment, oid, seen_ids, min_ctime=min_ctime)
             if new_main_comment:
                 new_comments_found.append(new_main_comment)
             
@@ -70,7 +70,8 @@ def check_video_comments(oid, bv_id, title, header, seen_ids, owner_mid=None):
                         continue
                     
                     new_sub_comment = process_and_notify_comment(sub_reply, oid, seen_ids,
-                                                                 parent_user_name=comment['member']['uname'])
+                                                                 parent_user_name=comment['member']['uname'],
+                                                                 min_ctime=min_ctime)
                     if new_sub_comment:
                         new_comments_found.append(new_sub_comment)
             
@@ -91,7 +92,8 @@ def check_video_comments(oid, bv_id, title, header, seen_ids, owner_mid=None):
                         continue
                     
                     new_hidden_comment = process_and_notify_comment(sub_reply, oid, seen_ids,
-                                                                    parent_user_name=comment['member']['uname'])
+                                                                    parent_user_name=comment['member']['uname'],
+                                                                    min_ctime=min_ctime)
                     if new_hidden_comment:
                         new_comments_found.append(new_hidden_comment)
         
@@ -99,6 +101,9 @@ def check_video_comments(oid, bv_id, title, header, seen_ids, owner_mid=None):
     except Exception as e:
         log(f"检查视频 {title} 时出错: {e}")
         return False, []
+
+# 记录程序启动时间，用于过滤历史记录
+MONITOR_START_TIME = time.time()
 
 def update_user_latest_video(mid, uname, header):
     """
@@ -148,7 +153,7 @@ def update_user_latest_video(mid, uname, header):
         return None, None
 
 
-def update_user_latest_dynamic(mid, uname, header, dynamics=None):
+def update_user_latest_dynamic(mid, uname, header, dynamics=None, min_timestamp=None):
     """
     获取用户最新的动态，并更新到监控列表
     保留该用户最新的两条动态
@@ -158,6 +163,7 @@ def update_user_latest_dynamic(mid, uname, header, dynamics=None):
         uname: 用户名
         header: 请求头
         dynamics: 可选，预取到的动态列表
+        min_timestamp: 可选，最小时间戳过滤
     
     Returns:
         [(动态ID, 动态内容, 动态类型), ...] 新添加的动态列表
@@ -204,6 +210,7 @@ def update_user_latest_dynamic(mid, uname, header, dynamics=None):
             new_dynamic_type = dynamic['type']
             new_comment_oid = dynamic.get('comment_oid')
             new_comment_type = dynamic.get('comment_type')
+            dynamic_ts = dynamic.get('timestamp', 0)
             
             # 检查是否为充电专属
             is_exclusive = dynamic.get('is_exclusive', False)
@@ -215,8 +222,14 @@ def update_user_latest_dynamic(mid, uname, header, dynamics=None):
             
             if db.add_monitored_dynamic(new_dynamic_id, mid, new_content, new_dynamic_type, 
                                       comment_oid=new_comment_oid, comment_type=new_comment_type):
+                
+                # 如果动态太旧，则不推送到 added_dynamics (不发送通知)
+                if min_timestamp and dynamic_ts < min_timestamp:
+                    log(f"[添加] 用户 [{uname}] 的历史动态 (不通知): {type_name} - {new_content[:40]}...")
+                    continue
+
                 log(f"[添加] 用户 [{uname}] 的新动态: {type_name} - {new_content[:40]}...")
-                added_dynamics.append((new_dynamic_id, new_content, new_dynamic_type, type_name, dynamic['timestamp']))
+                added_dynamics.append((new_dynamic_id, new_content, new_dynamic_type, type_name, dynamic_ts))
         
         return added_dynamics
     except Exception as e:
@@ -224,7 +237,7 @@ def update_user_latest_dynamic(mid, uname, header, dynamics=None):
         return []
 
 
-def check_dynamic_comments(dynamic_id, mid, content, header, seen_ids, oid=None, comment_type=None):
+def check_dynamic_comments(dynamic_id, mid, content, header, seen_ids, oid=None, comment_type=None, min_ctime=None):
     """
     检查单个动态的评论
     只监控动态作者(发布者)自己的评论
@@ -235,7 +248,6 @@ def check_dynamic_comments(dynamic_id, mid, content, header, seen_ids, oid=None,
         # 优先使用数据库中的 oid 和 comment_type
         result = user_monitor.fetch_dynamic_comments(dynamic_id, header, oid=oid, comment_type=comment_type)
         comments = result.get('comments', [])
-        has_more = result.get('has_more', False)
         
         if not comments:
             return False, []
@@ -243,6 +255,7 @@ def check_dynamic_comments(dynamic_id, mid, content, header, seen_ids, oid=None,
         for comment in comments:
             commenter_mid = str(comment['mid'])
             rpid = comment['rpid']
+            ctime = int(comment["ctime"])
             
             if commenter_mid != mid:
                 if rpid not in seen_ids:
@@ -254,19 +267,22 @@ def check_dynamic_comments(dynamic_id, mid, content, header, seen_ids, oid=None,
                 seen_ids.add(rpid)
                 db.add_dynamic_comment_to_db(rpid, dynamic_id)
                 
+                # 如果评论太旧，则不推送到 new_comments_found (不发送通知)
+                if min_ctime and ctime < min_ctime:
+                    continue
+
                 from datetime import datetime
-                import pandas as pd
                 
                 try:
-                    comment_time = datetime.fromtimestamp(int(comment["ctime"])).strftime('%Y-%m-%d %H:%M:%S')
+                    comment_time = datetime.fromtimestamp(ctime).strftime('%Y-%m-%d %H:%M:%S')
                 except (ValueError, TypeError):
-                    comment_time = str(comment["ctime"])
+                    comment_time = str(ctime)
                 
                 new_comments_found.append({
                     "user": comment['uname'],
                     "message": comment['message'],
                     "time": comment_time,
-                    "ctime": comment["ctime"],
+                    "ctime": ctime,
                     "type": "动态评论"
                 })
         
@@ -332,7 +348,7 @@ def auto_monitor():
         dynamic_added_count = 0
         
         for mid, uname in dynamic_users.items():
-            added = update_user_latest_dynamic(mid, uname, header)
+            added = update_user_latest_dynamic(mid, uname, header, min_timestamp=MONITOR_START_TIME)
             if added:
                 dynamic_added_count += len(added)
                 time.sleep(0.5)
@@ -434,7 +450,7 @@ def auto_monitor():
                 for mid, uname in dynamic_users.items():
                     try:
                         # 尝试更新动态，传入预取的关注流数据
-                        added = update_user_latest_dynamic(mid, uname, header, dynamics=followed_dynamics)
+                        added = update_user_latest_dynamic(mid, uname, header, dynamics=followed_dynamics, min_timestamp=MONITOR_START_TIME)
                         if added:
                             for dynamic_id, content, dynamic_type, type_name, pub_ts in added:
                                 log(f"[通知] 发现新动态: {type_name} - {content[:40]}...")
@@ -495,8 +511,12 @@ def auto_monitor():
                 
                 try:
                     has_new, new_comments = check_video_comments(
-                        oid, data['bv_id'], title, header, seen_ids, owner_mid
+                        oid, data['bv_id'], title, header, seen_ids, owner_mid,
+                        min_ctime=MONITOR_START_TIME
                     )
+                    
+                    # 使用 main.py 中的 process_and_notify_comment 的过滤逻辑实际上是在 check_video_comments 内部调用的
+                    # 我们需要修改 check_video_comments 传递 min_ctime
                     
                     if has_new:
                         log(f"[新评论] [{title}] 发现 {len(new_comments)} 则新评论！")
@@ -523,7 +543,8 @@ def auto_monitor():
                     has_new, new_comments = check_dynamic_comments(
                         dynamic_id, mid, content, header, seen_ids,
                         oid=data.get('comment_oid'), 
-                        comment_type=data.get('comment_type')
+                        comment_type=data.get('comment_type'),
+                        min_ctime=MONITOR_START_TIME
                     )
                     
                     if has_new:

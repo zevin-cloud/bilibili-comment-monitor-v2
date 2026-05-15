@@ -1,2 +1,1 @@
-https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=9e18ba0c-6c1e-4b9e-8335-beee5301a455
 https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=75f2905d-fa27-4a25-a083-8dcde9fa7072

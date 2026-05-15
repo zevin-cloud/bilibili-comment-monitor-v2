@@ -395,7 +395,7 @@ def display_main_menu():
             print("无效的输入，请重新选择。")
 
 
-def process_and_notify_comment(reply, oid, seen_ids, parent_user_name=None, filter_user_mids=None):
+def process_and_notify_comment(reply, oid, seen_ids, parent_user_name=None, filter_user_mids=None, min_ctime=None):
     """
     处理单条评论，检查是否为新评论，如果是，则存入数据库并返回格式化信息。
     
@@ -405,9 +405,11 @@ def process_and_notify_comment(reply, oid, seen_ids, parent_user_name=None, filt
         seen_ids: 已见过的评论ID集合
         parent_user_name: 父评论用户名（用于子评论）
         filter_user_mids: 如果指定，只返回这些用户的评论
+        min_ctime: 最小时间戳，早于此时间的评论将不返回（不通知）但仍会记为已见
     """
     rpid = reply['rpid_str']
     member_mid = str(reply['member']['mid'])
+    ctime = reply.get('ctime', 0)
     
     # 如果指定了用户过滤，且当前评论不是指定用户的，则跳过
     if filter_user_mids and member_mid not in filter_user_mids:
@@ -420,6 +422,10 @@ def process_and_notify_comment(reply, oid, seen_ids, parent_user_name=None, filt
     if rpid not in seen_ids:
         seen_ids.add(rpid)
         db.add_comment_to_db(rpid, oid)
+
+        # 如果评论太旧，直接返回 None，不进行后续格式化和通知
+        if min_ctime and ctime < min_ctime:
+            return None
 
         # 判断回复类型
         if parent_user_name:
@@ -443,6 +449,7 @@ def process_and_notify_comment(reply, oid, seen_ids, parent_user_name=None, filt
             "type": comment_type
         }
     return None
+
 
 
 def wait_with_manual_trigger(interval_seconds):
