@@ -55,6 +55,8 @@ def check_video_comments(oid, bv_id, title, header, seen_ids, owner_mid=None, mi
             
             new_main_comment = process_and_notify_comment(comment, oid, seen_ids, min_ctime=min_ctime)
             if new_main_comment:
+                new_main_comment["bv_id"] = bv_id
+                new_main_comment["rpid"] = comment['rpid_str']
                 new_comments_found.append(new_main_comment)
             
             # 检查子评论（同样只监控作者自己的回复）
@@ -73,6 +75,8 @@ def check_video_comments(oid, bv_id, title, header, seen_ids, owner_mid=None, mi
                                                                  parent_user_name=comment['member']['uname'],
                                                                  min_ctime=min_ctime)
                     if new_sub_comment:
+                        new_sub_comment["bv_id"] = bv_id
+                        new_sub_comment["rpid"] = sub_reply['rpid_str']
                         new_comments_found.append(new_sub_comment)
             
             # 获取更多子评论
@@ -95,6 +99,8 @@ def check_video_comments(oid, bv_id, title, header, seen_ids, owner_mid=None, mi
                                                                     parent_user_name=comment['member']['uname'],
                                                                     min_ctime=min_ctime)
                     if new_hidden_comment:
+                        new_hidden_comment["bv_id"] = bv_id
+                        new_hidden_comment["rpid"] = sub_reply['rpid_str']
                         new_comments_found.append(new_hidden_comment)
         
         return len(new_comments_found) > 0, new_comments_found
@@ -283,7 +289,9 @@ def check_dynamic_comments(dynamic_id, mid, content, header, seen_ids, oid=None,
                     "message": comment['message'],
                     "time": comment_time,
                     "ctime": ctime,
-                    "type": "动态评论"
+                    "type": "动态评论",
+                    "dynamic_id": dynamic_id,
+                    "rpid": rpid
                 })
         
         return len(new_comments_found) > 0, new_comments_found
@@ -387,7 +395,8 @@ def auto_monitor():
                 "title": title,
                 "bv_id": bv_id,
                 "owner_mid": owner_mid,
-                "seen_ids": db.load_seen_comments_for_video(oid)
+                "seen_ids": db.load_seen_comments_for_video(oid),
+                "monitor_added_time": MONITOR_START_TIME
             }
             seen_count = len(video_targets[oid]['seen_ids'])
             total_seen += seen_count
@@ -407,7 +416,8 @@ def auto_monitor():
                 "uname": uname,
                 "seen_ids": db.load_seen_dynamic_comments(dynamic_id),
                 "comment_oid": comment_oid,
-                "comment_type": comment_type
+                "comment_type": comment_type,
+                "monitor_added_time": MONITOR_START_TIME
             }
     
     # 开始监控循环
@@ -471,7 +481,8 @@ def auto_monitor():
                         "title": title,
                         "bv_id": bv_id,
                         "owner_mid": owner_mid,
-                        "seen_ids": db.load_seen_comments_for_video(oid)
+                        "seen_ids": db.load_seen_comments_for_video(oid),
+                        "monitor_added_time": time.time()
                     }
                     log(f"新视频加入监控: {title}")
             
@@ -493,7 +504,8 @@ def auto_monitor():
                         "uname": uname,
                         "seen_ids": db.load_seen_dynamic_comments(dynamic_id),
                         "comment_oid": comment_oid,
-                        "comment_type": comment_type
+                        "comment_type": comment_type,
+                        "monitor_added_time": time.time()
                     }
                     log(f"[动态] 新动态加入监控: {uname} - {content[:30]}...")
             
@@ -512,7 +524,7 @@ def auto_monitor():
                 try:
                     has_new, new_comments = check_video_comments(
                         oid, data['bv_id'], title, header, seen_ids, owner_mid,
-                        min_ctime=MONITOR_START_TIME
+                        min_ctime=data.get('monitor_added_time', MONITOR_START_TIME)
                     )
                     
                     # 使用 main.py 中的 process_and_notify_comment 的过滤逻辑实际上是在 check_video_comments 内部调用的
@@ -539,12 +551,19 @@ def auto_monitor():
                 uname = data['uname']
                 seen_ids = data['seen_ids']
                 
+                # 如果是视频类型的动态，且对应的视频已经在视频监控列表中，则无需重复监控同一评论区
+                comment_oid = data.get('comment_oid')
+                comment_type = data.get('comment_type')
+                if str(comment_type) == '1' and comment_oid and str(comment_oid) in [str(k) for k in video_targets.keys()]:
+                    log(f"[动态] 跳过重复监控视频动态: {uname} - {content[:30]}... (已在视频列表中监控)")
+                    continue
+                
                 try:
                     has_new, new_comments = check_dynamic_comments(
                         dynamic_id, mid, content, header, seen_ids,
                         oid=data.get('comment_oid'), 
                         comment_type=data.get('comment_type'),
-                        min_ctime=MONITOR_START_TIME
+                        min_ctime=data.get('monitor_added_time', MONITOR_START_TIME)
                     )
                     
                     if has_new:

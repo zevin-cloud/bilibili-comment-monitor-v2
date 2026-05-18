@@ -46,12 +46,31 @@ def send_webhook_notification(video_title, new_comments):
         if hasattr(comment_time, 'strftime'):
             comment_time = comment_time.strftime('%Y-%m-%d %H:%M:%S')
 
+        # 构建直达链接
+        link_str = ""
+        if 'bv_id' in comment and comment.get('bv_id'):
+            bv_id = comment['bv_id']
+            rpid = comment.get('rpid', '')
+            if rpid:
+                link_str = f"https://www.bilibili.com/video/{bv_id}#reply{rpid}"
+            else:
+                link_str = f"https://www.bilibili.com/video/{bv_id}"
+        elif 'dynamic_id' in comment and comment.get('dynamic_id'):
+            dynamic_id = comment['dynamic_id']
+            rpid = comment.get('rpid', '')
+            if rpid:
+                link_str = f"https://t.bilibili.com/{dynamic_id}#reply{rpid}"
+            else:
+                link_str = f"https://t.bilibili.com/{dynamic_id}"
+
         comment_block = (
             f"**用户:** {user}\n"
             f"**类型:** {comment['type']}\n"
             f"**内容:** {message}\n"
             f"**时间:** {comment_time}"
         )
+        if link_str:
+            comment_block += f"\n**链接:** {link_str}"
         message_lines.append(comment_block)
         message_lines.append("--------------------------------------")
 
