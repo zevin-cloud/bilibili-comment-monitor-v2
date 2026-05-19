@@ -131,6 +131,11 @@ def extract_images_from_dynamic_item(item):
                 url = pic.get('src') or pic.get('url')
                 if url:
                     images.append(url)
+        # 4. archive 视频封面类型
+        elif major.get('archive') and major['archive'].get('cover'):
+            cover_url = major['archive'].get('cover')
+            if cover_url:
+                images.append(cover_url)
     return images
 
 

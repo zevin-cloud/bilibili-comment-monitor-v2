@@ -137,7 +137,7 @@ def build_webhook_payload(webhook_url, title, markdown_content):
         }
 
 
-def send_new_dynamic_notification(uname, dynamic_type, content, pub_ts=None, images=None):
+def send_new_dynamic_notification(uname, dynamic_type, content, pub_ts=None, images=None, dynamic_id=None, bvid=None):
     """
     发送新动态通知到 Webhook。
     
@@ -147,6 +147,8 @@ def send_new_dynamic_notification(uname, dynamic_type, content, pub_ts=None, ima
         content: 动态内容
         pub_ts: 动态发布的原始时间戳
         images: 动态附带的图片 URL 列表
+        dynamic_id: 动态的ID
+        bvid: 视频的BV号（如果是视频类型的动态）
     """
     if not check_webhook_configured():
         return
@@ -168,10 +170,19 @@ def send_new_dynamic_notification(uname, dynamic_type, content, pub_ts=None, ima
         "--------------------------------------",
         f"**类型:** {dynamic_type}",
         f"**时间:** {display_time}",
+    ]
+
+    # 添加动态直达链接或视频直达链接
+    if bvid:
+        message_lines.append(f"**视频直达:** https://www.bilibili.com/video/{bvid}")
+    if dynamic_id:
+        message_lines.append(f"**动态直达:** https://t.bilibili.com/{dynamic_id}")
+
+    message_lines.extend([
         f"**内容:**",
         content,
         "--------------------------------------"
-    ]
+    ])
 
     # 如果有图片，将图片渲染及图片超链接追加到内容中
     if images and isinstance(images, list):

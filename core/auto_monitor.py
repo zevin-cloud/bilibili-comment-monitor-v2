@@ -239,7 +239,7 @@ def update_user_latest_dynamic(mid, uname, header, dynamics=None, min_timestamp=
                     continue
 
                 log(f"[添加] 用户 [{uname}] 的新动态: {type_name} - {new_content[:40]}...")
-                added_dynamics.append((new_dynamic_id, new_content, new_dynamic_type, type_name, dynamic_ts, dynamic.get('images', [])))
+                added_dynamics.append((new_dynamic_id, new_content, new_dynamic_type, type_name, dynamic_ts, dynamic.get('images', []), dynamic.get('bvid', '')))
         
         return added_dynamics
     except Exception as e:
@@ -466,10 +466,10 @@ def auto_monitor():
                         # 尝试更新动态，传入预取的关注流数据
                         added = update_user_latest_dynamic(mid, uname, header, dynamics=followed_dynamics, min_timestamp=MONITOR_START_TIME)
                         if added:
-                            for dynamic_id, content, dynamic_type, type_name, pub_ts, images in added:
+                            for dynamic_id, content, dynamic_type, type_name, pub_ts, images, bvid in added:
                                 log(f"[通知] 发现新动态: {type_name} - {content[:40]}...")
                                 if webhook_enabled:
-                                    notifier.send_new_dynamic_notification(uname, type_name, content, pub_ts, images)
+                                    notifier.send_new_dynamic_notification(uname, type_name, content, pub_ts, images, dynamic_id, bvid)
                             time.sleep(0.3)
                     except Exception as e:
                         log(f"更新用户 {uname} 动态时出错: {e}")
