@@ -107,6 +107,33 @@ def get_user_dynamic_videos(mid, header, limit=10):
     return videos
 
 
+def extract_images_from_dynamic_item(item):
+    images = []
+    modules = item.get('modules', {})
+    m_dyn = modules.get('module_dynamic', {})
+    if m_dyn and m_dyn.get('major'):
+        major = m_dyn['major']
+        # 1. opus 类型 (新图文)
+        if major.get('opus') and major['opus'].get('pics'):
+            for pic in major['opus']['pics']:
+                url = pic.get('url') or pic.get('src')
+                if url:
+                    images.append(url)
+        # 2. draw 类型 (传统带图动态)
+        elif major.get('draw') and major['draw'].get('items'):
+            for pic in major['draw']['items']:
+                url = pic.get('src') or pic.get('url')
+                if url:
+                    images.append(url)
+        # 3. common 类型
+        elif major.get('common') and major['common'].get('pics'):
+            for pic in major['common']['pics']:
+                url = pic.get('src') or pic.get('url')
+                if url:
+                    images.append(url)
+    return images
+
+
 def get_user_dynamics(mid, header, limit=20):
     """获取用户的动态列表（包括文字、图片、视频等）。支持充电专属动态。"""
     dynamics = []
@@ -175,6 +202,7 @@ def get_user_dynamics(mid, header, limit=20):
                             comment_type = d_basic.get('comment_type') or comment_type
                     except: pass
 
+                images = extract_images_from_dynamic_item(item)
                 dynamics.append({
                     'dynamic_id': id_str,
                     'type': dynamic_type,
@@ -184,7 +212,8 @@ def get_user_dynamics(mid, header, limit=20):
                     'video_title': video_title,
                     'is_exclusive': is_exclusive,
                     'comment_oid': comment_oid,
-                    'comment_type': comment_type
+                    'comment_type': comment_type,
+                    'images': images
                 })
     except Exception as e:
         print(f"请求用户 {mid} 普通动态时出错: {e}")
@@ -203,6 +232,16 @@ def get_user_dynamics(mid, header, limit=20):
                 if did in existing_ids:
                     continue
                 
+                c_images = []
+                c_pics = c_item.get('pics', [])
+                if c_pics:
+                    for pic in c_pics:
+                        if isinstance(pic, dict):
+                            url = pic.get('url') or pic.get('src')
+                            if url: c_images.append(url)
+                        elif isinstance(pic, str):
+                            c_images.append(pic)
+
                 dynamics.append({
                     'dynamic_id': did,
                     'type': 2, # 充电动态通常是图文，映射为2
@@ -212,7 +251,8 @@ def get_user_dynamics(mid, header, limit=20):
                     'video_title': '',
                     'is_exclusive': True,
                     'comment_oid': c_item.get('comment_id') or did,
-                    'comment_type': c_item.get('comment_type') or 17
+                    'comment_type': c_item.get('comment_type') or 17,
+                    'images': c_images
                 })
     except Exception as e:
         print(f"请求用户 {mid} 充电专属动态时出错: {e}")
@@ -336,6 +376,7 @@ def get_followed_feed(header, limit=20):
                         content = m_dyn['major']['opus']['summary'].get('text', '')
                 is_exclusive = item.get('basic', {}).get('is_only_fans', False)
                 basic = item.get('basic', {})
+                images = extract_images_from_dynamic_item(item)
                 results.append({
                     'mid': str(author.get('mid', '')),
                     'uname': author.get('name', ''),
@@ -345,7 +386,8 @@ def get_followed_feed(header, limit=20):
                     'timestamp': author.get('pub_ts', 0),
                     'is_exclusive': is_exclusive,
                     'comment_oid': basic.get('comment_id_str'),
-                    'comment_type': basic.get('comment_type')
+                    'comment_type': basic.get('comment_type'),
+                    'images': images
                 })
     except Exception as e:
         print(f"获取关注动态流失败: {e}")

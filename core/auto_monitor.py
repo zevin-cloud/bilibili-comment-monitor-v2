@@ -230,12 +230,16 @@ def update_user_latest_dynamic(mid, uname, header, dynamics=None, min_timestamp=
                                       comment_oid=new_comment_oid, comment_type=new_comment_type):
                 
                 # 如果动态太旧，则不推送到 added_dynamics (不发送通知)
-                if min_timestamp and dynamic_ts < min_timestamp:
+                try:
+                    ts_val = float(dynamic_ts)
+                except (ValueError, TypeError):
+                    ts_val = 0
+                if min_timestamp and ts_val < float(min_timestamp):
                     log(f"[添加] 用户 [{uname}] 的历史动态 (不通知): {type_name} - {new_content[:40]}...")
                     continue
 
                 log(f"[添加] 用户 [{uname}] 的新动态: {type_name} - {new_content[:40]}...")
-                added_dynamics.append((new_dynamic_id, new_content, new_dynamic_type, type_name, dynamic_ts))
+                added_dynamics.append((new_dynamic_id, new_content, new_dynamic_type, type_name, dynamic_ts, dynamic.get('images', [])))
         
         return added_dynamics
     except Exception as e:
@@ -462,10 +466,10 @@ def auto_monitor():
                         # 尝试更新动态，传入预取的关注流数据
                         added = update_user_latest_dynamic(mid, uname, header, dynamics=followed_dynamics, min_timestamp=MONITOR_START_TIME)
                         if added:
-                            for dynamic_id, content, dynamic_type, type_name, pub_ts in added:
+                            for dynamic_id, content, dynamic_type, type_name, pub_ts, images in added:
                                 log(f"[通知] 发现新动态: {type_name} - {content[:40]}...")
                                 if webhook_enabled:
-                                    notifier.send_new_dynamic_notification(uname, type_name, content, pub_ts)
+                                    notifier.send_new_dynamic_notification(uname, type_name, content, pub_ts, images)
                             time.sleep(0.3)
                     except Exception as e:
                         log(f"更新用户 {uname} 动态时出错: {e}")

@@ -76,27 +76,68 @@ def send_webhook_notification(video_title, new_comments):
 
     full_message = "\n".join(message_lines)
 
-    # 构建通用的 JSON payload
-    # 2025年8月22日12:04:58 实测 钉钉 企业微信 OK
-    payload = {
-        "msgtype": "text",
-        "text": {
-            "content": full_message
-            } 
-        }
-
     # 遍历所有 Webhook URL 发送请求
     for webhook_url in webhook_urls:
         try:
+            payload = build_webhook_payload(webhook_url, f"发现新评论", full_message)
             response = requests.post(webhook_url, json=payload, timeout=10)
-            # 检查响应状态码，如果是不成功的状态码（如4xx, 5xx），则会抛出异常
             response.raise_for_status()
             print(f"  - [通知] Webhook 通知已成功发送至 {webhook_url[:30]}...")
         except requests.exceptions.RequestException as e:
             print(f"  - [错误] 发送 Webhook 通知到 {webhook_url[:30]}... 失败: {e}")
 
 
-def send_new_dynamic_notification(uname, dynamic_type, content, pub_ts=None):
+def build_webhook_payload(webhook_url, title, markdown_content):
+    """
+    智能判定 Webhook 类型（钉钉、企业微信、飞书、其他），
+    构建最适合的富文本/Markdown Payload 以获得最佳展示效果（例如渲染图片和加粗文字）。
+    """
+    if "oapi.dingtalk.com" in webhook_url:
+        return {
+            "msgtype": "markdown",
+            "markdown": {
+                "title": title,
+                "text": markdown_content
+            }
+        }
+    elif "qyapi.weixin.qq.com" in webhook_url:
+        # 企业微信机器人在个人微信端中展示时，不支持 markdown 格式（会显示“暂不支持此消息类型”）
+        # 为了完美的微信端兼容性，企业微信一律使用 "text" 消息类型，文字中的图片链接在微信里依然可以点击打开
+        return {
+            "msgtype": "text",
+            "text": {
+                "content": markdown_content
+            }
+        }
+    elif "feishu.cn" in webhook_url or "larksuite.com" in webhook_url:
+        return {
+            "msg_type": "interactive",
+            "card": {
+                "header": {
+                    "title": {
+                        "tag": "plain_text",
+                        "content": title
+                    }
+                },
+                "elements": [
+                    {
+                        "tag": "markdown",
+                        "content": markdown_content
+                    }
+                ]
+            }
+        }
+    else:
+        # 默认回退为普通文本消息，保持良好兼容性
+        return {
+            "msgtype": "text",
+            "text": {
+                "content": markdown_content
+            }
+        }
+
+
+def send_new_dynamic_notification(uname, dynamic_type, content, pub_ts=None, images=None):
     """
     发送新动态通知到 Webhook。
     
@@ -105,6 +146,7 @@ def send_new_dynamic_notification(uname, dynamic_type, content, pub_ts=None):
         dynamic_type: 动态类型（图片/文字/专栏/视频）
         content: 动态内容
         pub_ts: 动态发布的原始时间戳
+        images: 动态附带的图片 URL 列表
     """
     if not check_webhook_configured():
         return
@@ -131,17 +173,26 @@ def send_new_dynamic_notification(uname, dynamic_type, content, pub_ts=None):
         "--------------------------------------"
     ]
 
-    full_message = "\n".join(message_lines)
+    # 如果有图片，将图片渲染及图片超链接追加到内容中
+    if images and isinstance(images, list):
+        message_lines.append("**附带图片:**")
+        for idx, img_url in enumerate(images, 1):
+            # 自动为图片链接套接全球高速免费图片代理 wsrv.nl 以完美突破 B站 的防盗链规则，
+            # 从而在任何浏览器或微信环境中都能直接无阻查看图片
+            clean_url = img_url.replace("http://", "").replace("https://", "")
+            proxy_url = f"https://wsrv.nl/?url={clean_url}"
+            
+            message_lines.append(f"![图片 {idx}]({proxy_url})")
+            message_lines.append(f"图片 {idx} 链接 (直达免防盗链): {proxy_url}")
+            message_lines.append(f"图片 {idx} 原始链接: {img_url}")
+        message_lines.append("--------------------------------------")
 
-    payload = {
-        "msgtype": "text",
-        "text": {
-            "content": full_message
-        }
-    }
+    full_message = "\n".join(message_lines)
 
     for webhook_url in webhook_urls:
         try:
+            title = f"🆕 【{uname}】发布了新动态！"
+            payload = build_webhook_payload(webhook_url, title, full_message)
             response = requests.post(webhook_url, json=payload, timeout=10)
             response.raise_for_status()
             print(f"  - [通知] 新动态 Webhook 通知已成功发送至 {webhook_url[:30]}...")
