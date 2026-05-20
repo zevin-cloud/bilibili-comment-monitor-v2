@@ -176,7 +176,7 @@ def update_user_latest_dynamic(mid, uname, header, dynamics=None, min_timestamp=
     """
     added_dynamics = []
     try:
-        type_names = {8: '视频', 64: '专栏', 2: '图片', 4: '文字', 1: '转发'}
+        type_names = {8: '视频', 64: '专栏', 2: '图文', 4: '文字', 1: '转发'}
         
         # 过滤出该用户的动态（如果是从全局流里传进来的）
         user_dynamics = []
