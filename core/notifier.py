@@ -35,7 +35,7 @@ def send_webhook_notification(video_title, new_comments):
     # 格式化通知内容
     # 这种格式在大多数平台上都表现良好
     message_lines = [
-        f"🔥 **【{video_title}】发现 {len(new_comments)} 条新评论！**",
+        f"🔥🔥🔥🔥【{video_title}】发现 {len(new_comments)} 条新评论！🔥🔥🔥🔥",
         "--------------------------------------"
     ]
     for comment in new_comments:
@@ -64,10 +64,10 @@ def send_webhook_notification(video_title, new_comments):
                 link_str = f"https://t.bilibili.com/{dynamic_id}"
 
         comment_block = (
-            f"**用户:** {user}\n"
-            f"**类型:** {comment['type']}\n"
-            f"**内容:** {message}\n"
-            f"**时间:** {comment_time}"
+            f"用户: {user}\n"
+            f"类型: {comment['type']}\n"
+            f"内容: {message}\n"
+            f"时间: {comment_time}"
         )
         if link_str:
             comment_block += f"\n**链接:** {link_str}"
@@ -166,7 +166,7 @@ def send_new_dynamic_notification(uname, dynamic_type, content, pub_ts=None, ima
         display_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     message_lines = [
-        f"🆕 **【{uname}】发布了新动态！**",
+        f"🆕🆕🆕🆕 【{uname}】发布了新动态！🆕🆕🆕🆕",
         "--------------------------------------",
         f"**类型:** {dynamic_type}",
         f"**时间:** {display_time}",
@@ -174,19 +174,19 @@ def send_new_dynamic_notification(uname, dynamic_type, content, pub_ts=None, ima
 
     # 添加动态直达链接或视频直达链接
     if bvid:
-        message_lines.append(f"**视频直达:** https://www.bilibili.com/video/{bvid}")
+        message_lines.append(f"视频直达: https://www.bilibili.com/video/{bvid}")
     if dynamic_id:
-        message_lines.append(f"**动态直达:** https://t.bilibili.com/{dynamic_id}")
+        message_lines.append(f"动态直达: https://t.bilibili.com/{dynamic_id}")
 
     message_lines.extend([
-        f"**内容:**",
+        f"内容:",
         content,
         "--------------------------------------"
     ])
 
     # 如果有图片，将图片渲染及图片超链接追加到内容中
     if images and isinstance(images, list):
-        message_lines.append("**附带图片:**")
+        message_lines.append("附带图片:")
         for idx, img_url in enumerate(images, 1):
             # 自动为图片链接套接全球高速免费图片代理 wsrv.nl 以完美突破 B站 的防盗链规则，
             # 从而在任何浏览器或微信环境中都能直接无阻查看图片
