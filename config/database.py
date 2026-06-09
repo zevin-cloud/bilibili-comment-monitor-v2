@@ -394,6 +394,21 @@ def get_monitored_dynamics():
         ''')
         return cursor.fetchall()
 
+def get_active_monitored_dynamics(limit=5):
+    """獲取每個用戶最新的 limit 個監控動態。"""
+    all_dynamics = get_monitored_dynamics()
+    user_dynamics = {}
+    active_dynamics = []
+    for d in all_dynamics:
+        mid = d[1]
+        if mid not in user_dynamics:
+            user_dynamics[mid] = []
+        if len(user_dynamics[mid]) < limit:
+            user_dynamics[mid].append(d)
+            active_dynamics.append(d)
+    return active_dynamics
+
+
 def get_user_monitored_dynamics(mid):
     """獲取指定用戶的所有監控動態。"""
     with sqlite3.connect(DB_NAME) as conn:

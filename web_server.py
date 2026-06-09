@@ -217,7 +217,7 @@ def delete_user(mid):
 @app.route('/api/dynamics', methods=['GET'])
 def get_dynamics():
     """获取所有监控的动态"""
-    dynamics = db.get_monitored_dynamics()
+    dynamics = db.get_active_monitored_dynamics()
     return jsonify([{
         'dynamic_id': d[0],
         'mid': d[1],

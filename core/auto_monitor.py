@@ -180,6 +180,7 @@ def update_user_latest_dynamic(mid, uname, header, dynamics=None, min_timestamp=
         
         # 过滤出该用户的动态（如果是从全局流里传进来的）
         user_dynamics = []
+        is_from_space = False
         if dynamics is not None:
             user_dynamics = [d for d in dynamics if str(d.get('mid', '')) == str(mid)]
         
@@ -187,6 +188,7 @@ def update_user_latest_dynamic(mid, uname, header, dynamics=None, min_timestamp=
         if not user_dynamics:
             log(f"[动态] 正在获取用户 {uname}({mid}) 的空间动态...")
             user_dynamics = user_monitor.get_user_dynamics(mid, header, limit=5)
+            is_from_space = True
             
         if not user_dynamics:
             return []
@@ -203,12 +205,9 @@ def update_user_latest_dynamic(mid, uname, header, dynamics=None, min_timestamp=
         old_dynamics = db.get_user_monitored_dynamics(mid)
         new_dynamic_ids = {d['dynamic_id'] for d in latest_five}
         
-        # 移除不在前五条中的老动态
-        for old_dynamic in old_dynamics:
-            old_dynamic_id = old_dynamic[0]
-            if old_dynamic_id not in new_dynamic_ids:
-                db.remove_monitored_dynamic(old_dynamic_id)
-                log(f"[移除] 用户 [{uname}] 的老动态 ID: {old_dynamic_id}")
+        # 不再删除老动态，直接保留在数据库中以防止重复发送通知
+        pass
+
         
         for dynamic in latest_five:
             new_dynamic_id = dynamic['dynamic_id']
@@ -410,7 +409,7 @@ def auto_monitor():
     
     # 初始化动态监控数据
     dynamic_targets = {}
-    monitored_dynamics = db.get_monitored_dynamics()
+    monitored_dynamics = db.get_active_monitored_dynamics()
     if monitored_dynamics:
         log(f"[动态] 共 {len(monitored_dynamics)} 个动态在监控中")
         for dynamic_id, mid, content, dynamic_type, added_at, uname, comment_oid, comment_type in monitored_dynamics:
@@ -496,7 +495,7 @@ def auto_monitor():
                 del video_targets[oid]
             
             # 重新获取动态列表
-            current_dynamics = db.get_monitored_dynamics()
+            current_dynamics = db.get_active_monitored_dynamics()
             current_dynamic_ids = {d[0] for d in current_dynamics}
             
             # 添加新动态到监控
@@ -609,4 +608,17 @@ def auto_monitor():
 
 
 if __name__ == "__main__":
-    auto_monitor()
+    # Ensure only a single instance of auto_monitor runs at a time
+    try:
+        import fcntl
+        LOCK_FILE = 'monitor.lock'
+        lock_file_fp = open(LOCK_FILE, 'w')
+        try:
+            fcntl.flock(lock_file_fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            auto_monitor()
+        except IOError:
+            print("Error: Another instance of auto_monitor.py is already running.")
+            sys.exit(0)
+    except ImportError:
+        # Fallback for platforms without fcntl (e.g. Windows)
+        auto_monitor()
