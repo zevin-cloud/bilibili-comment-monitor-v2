@@ -144,7 +144,7 @@ def get_user_dynamics(mid, header, limit=20):
     dynamics = []
     
     # 1. 获取普通动态
-    url = f"https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space?host_mid={mid}"
+    url = f"https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space?host_mid={mid}&features=itemOpusStyle,listOnlyfans,opusBigCover&platform=web"
     type_map = {
         'DYNAMIC_TYPE_AV': 8,
         'DYNAMIC_TYPE_DRAW': 2,
@@ -222,45 +222,6 @@ def get_user_dynamics(mid, header, limit=20):
                 })
     except Exception as e:
         print(f"请求用户 {mid} 普通动态时出错: {e}")
-
-    # 2. 获取充电专属动态 (专用接口)
-    try:
-        charging_url = "https://api.bilibili.com/x/charging/v1/user/dynamic"
-        params = {'mid': mid}
-        c_resp = requests.get(charging_url, headers=header, params=params, timeout=10)
-        c_data = c_resp.json()
-        if c_data.get('code') == 0:
-            c_items = c_data.get('data', {}).get('list', [])
-            existing_ids = {d['dynamic_id'] for d in dynamics}
-            for c_item in c_items:
-                did = c_item.get('dynamic_id') or str(c_item.get('id', ''))
-                if did in existing_ids:
-                    continue
-                
-                c_images = []
-                c_pics = c_item.get('pics', [])
-                if c_pics:
-                    for pic in c_pics:
-                        if isinstance(pic, dict):
-                            url = pic.get('url') or pic.get('src')
-                            if url: c_images.append(url)
-                        elif isinstance(pic, str):
-                            c_images.append(pic)
-
-                dynamics.append({
-                    'dynamic_id': did,
-                    'type': 2, # 充电动态通常是图文，映射为2
-                    'content': c_item.get('content', ''),
-                    'timestamp': c_item.get('ctime', 0),
-                    'bvid': '',
-                    'video_title': '',
-                    'is_exclusive': True,
-                    'comment_oid': c_item.get('comment_id') or did,
-                    'comment_type': c_item.get('comment_type') or 17,
-                    'images': c_images
-                })
-    except Exception as e:
-        print(f"请求用户 {mid} 充电专属动态时出错: {e}")
 
     # 按时间戳降序排序，并取前 limit 条
     dynamics.sort(key=lambda x: x['timestamp'], reverse=True)
@@ -355,7 +316,7 @@ def fetch_all_dynamic_comments(dynamic_id, header):
 
 def get_followed_feed(header, limit=20):
     """获取当前登录账号关注者的动态流（Feed All）。"""
-    url = "https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/all"
+    url = "https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/all?features=itemOpusStyle,listOnlyfans,opusBigCover&platform=web"
     type_map = {
         'DYNAMIC_TYPE_AV': 8, 'DYNAMIC_TYPE_DRAW': 2, 'DYNAMIC_TYPE_WORD': 4,
         'DYNAMIC_TYPE_FORWARD': 1, 'DYNAMIC_TYPE_ARTICLE': 64,

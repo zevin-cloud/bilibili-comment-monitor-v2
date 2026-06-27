@@ -63,7 +63,7 @@ docker-compose up -d
 
 #### 4. 访问Web界面
 
-打开浏览器访问 `http://localhost:5000`
+打开浏览器访问 `http://localhost:5001`
 
 #### Docker常用命令
 
@@ -102,7 +102,7 @@ pip install -r requirements.txt
 
 **方式一：自动登录（推荐）**
 1. 启动Web服务器：`python web_server.py`
-2. 访问 `http://localhost:5000`
+2. 访问 `http://localhost:5001`
 3. 点击"登录B站"按钮，扫描二维码
 
 **方式二：手动配置**
@@ -134,7 +134,7 @@ https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=your_key_here
 python web_server.py
 ```
 
-访问 `http://localhost:5000` 打开管理界面
+访问 `http://localhost:5001` 打开管理界面
 
 ### 功能说明
 
